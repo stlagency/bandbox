@@ -1,0 +1,97 @@
+# PhillyBricks — self-host stack (PRD §8, SELF_HOST.md).
+#
+# Three services: PostGIS (the warehouse), the ingestion worker, and the Next.js
+# web app. This is the "run it yourself / run it for another city" path — point the
+# CityAdapter at a new city (SELF_HOST.md) and the same compose stack serves it.
+#
+# Secrets come from a local .env (copy .env.example → .env). NEVER commit .env.
+# `docker compose --env-file .env up` wires the variables below.
+#
+# NOTE ON IMAGES: the `db` service uses the upstream postgis image directly. The
+# `worker` and `web` services build from Dockerfiles under infra/docker/. Those
+# Dockerfiles are scaffolds (documented TODOs inside) — the pnpm build wiring for
+# each package is finalized in its own milestone (M4 web, M1 worker). Until then
+# `docker compose build` will surface exactly what each image still needs.
+
+name: phillybricks
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostGIS — canonical/derived store. Matches the CI + prod major (16 / 3.4).
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-phillybricks}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------------------
+  # Migrations — one-shot: applies packages/db migrations, then exits.
+  # `depends_on` gates it on a healthy db. Run on demand:
+  #   docker compose run --rm migrate
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+    profiles: ['tools'] # not started by `up`; invoked explicitly.
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # In-network DSN. The migration runner reads DATABASE_URL (PRD §8).
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-phillybricks}
+    command: ['pnpm', '--filter', '@phillybricks/db', 'migrate']
+
+  # ---------------------------------------------------------------------------
+  # Ingestion worker — the nightly pipeline. In self-host you typically run this
+  # on a host cron / a loop rather than GitHub Actions. `command` defaults to a
+  # single nightly pass; override to loop.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+    restart: 'no' # a batch job, not a daemon — schedule it from the host.
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override the pooled cloud DSN with the in-network one for self-host.
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-phillybricks}
+    command: ['pnpm', '--filter', '@phillybricks/ingestion', 'run:nightly']
+
+  # ---------------------------------------------------------------------------
+  # Web app — Next.js (App Router). Serves the read surfaces.
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-phillybricks}
+      PORT: '3000'
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes:
+  pgdata:

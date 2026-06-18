@@ -1,0 +1,15 @@
+{
+  "_comment": "Normalized 9-digit OPA parcel_pk keys that exist in public.parcel. The golden join-rate fixtures are measured against THIS set. Mirrors what loadParcelKeyIndex() would return from `select parcel_pk from public.parcel where is_active=true`.",
+  "parcel_pks": [
+    "523045600",
+    "351243300",
+    "881000000",
+    "000012345",
+    "012345678",
+    "100200300",
+    "200300400",
+    "300400500",
+    "400500600",
+    "500600700"
+  ]
+}

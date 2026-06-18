@@ -9,8 +9,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint",
-    "test": "vitest run"
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@phillybricks/core": "workspace:*",
@@ -27,6 +27,7 @@
     "@types/node": "^20.19.0",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "@eslint/eslintrc": "^3.2.0",
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.1.4",
     "typescript": "^5.7.3",

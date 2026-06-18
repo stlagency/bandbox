@@ -1,0 +1,128 @@
+# PhillyBricks nightly ingestion (PRD §4.1, §4.2, §10).
+#
+# Runs the ingestion worker, then performs a REPO-MUTATING keep-alive commit
+# (the schedule trigger alone does NOT reset GitHub's 60-day idle auto-disable —
+# only a commit/comment does), then pings the healthchecks.io dead-man's-switch
+# ONLY on success. The monitor alerts on the ABSENCE of a run, which a per-source
+# failure webhook cannot detect — a run that never starts is the fatal, irrecoverable
+# failure mode (history stops accruing silently).
+#
+# Cadence: staggered AFTER Philadelphia's morning data refresh. Philly publishes
+# its nightly dumps around local early morning (US/Eastern). We run at 09:17 UTC
+# (~04:17–05:17 ET depending on DST) so the upstream refresh has settled. The :17
+# offset avoids the top-of-hour cron stampede on GitHub's shared schedulers.
+#
+# The job is resumable (ops.source_cursor, PRD §4.1) and capped at 6h.
+
+name: Nightly ingestion
+
+on:
+  schedule:
+    # min hour dom mon dow  (UTC). 09:17 UTC daily.
+    - cron: '17 9 * * *'
+  # Manual trigger for ad-hoc re-runs / first bootstrap.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you running nightly manually?'
+        required: false
+        default: 'manual run'
+
+# Don't overlap two nightly runs; let the in-flight one finish (cursor-resumable).
+concurrency:
+  group: nightly-ingestion
+  cancel-in-progress: false
+
+permissions:
+  # The keep-alive step pushes a heartbeat commit back to the repo.
+  contents: write
+
+jobs:
+  ingest:
+    name: Ingest → keep-alive → liveness ping
+    runs-on: ubuntu-latest
+    # 6h cap (PRD §4.1). A backfill that dies mid-run resumes from ops.source_cursor.
+    timeout-minutes: 360
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_VAULT_KEY_ID: ${{ secrets.SUPABASE_VAULT_KEY_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
+      # Bid4Assets enrichment is OFF by default in the public repo (PRD §4.2).
+      ENABLE_BID4ASSETS_ENRICHMENT: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Signal the dead-man's-switch that a run STARTED (healthchecks.io /start
+      # endpoint). On the final ping (success) it measures run duration; if a run
+      # starts but never completes, the monitor still alerts on the missing success.
+      - name: Liveness — signal run start
+        if: ${{ env.HEALTHCHECKS_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_URL}/start" || true
+
+      - name: Run ingestion worker (nightly)
+        # Cursor-resumable; idempotent upserts on natural source ids (PRD §4.1).
+        run: pnpm --filter @phillybricks/ingestion run:nightly
+
+      # REPO-MUTATING keep-alive (PRD §4.1, §10). MUST run even if ingestion failed,
+      # so the cron never silently auto-disables. The commit diff is the whole point.
+      - name: Keep-alive — update heartbeat
+        if: ${{ always() }}
+        env:
+          KEEPALIVE_TS: ${{ github.event.repository.updated_at }}
+          KEEPALIVE_RUN_ID: ${{ github.run_id }}
+          KEEPALIVE_SHA: ${{ github.sha }}
+          KEEPALIVE_WORKFLOW: nightly
+        run: |
+          # Deterministic timestamp: prefer the workflow's own start time, fall back
+          # to a fixed-format UTC stamp. We never call Date.now() inside the script.
+          if [ -z "${KEEPALIVE_TS}" ]; then
+            export KEEPALIVE_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+          node infra/scripts/keepalive.mjs
+
+      - name: Keep-alive — commit heartbeat
+        if: ${{ always() }}
+        run: |
+          git config user.name "phillybricks-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add infra/heartbeat/last-run.txt
+          if git diff --cached --quiet; then
+            echo "Heartbeat unchanged — nothing to commit (rare; still alive)."
+          else
+            git commit -m "chore(nightly): heartbeat ${{ github.run_id }} [skip ci]"
+            # Push with the built-in token; contents:write permission is granted above.
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      # Dead-man's-switch: ping ONLY on overall success. The monitor's grace window
+      # is what raises the alarm when a nightly run is absent.
+      - name: Liveness — ping healthchecks.io on success
+        if: ${{ success() && env.HEALTHCHECKS_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_URL}"
+
+      - name: Liveness — signal failure
+        if: ${{ failure() && env.HEALTHCHECKS_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_URL}/fail" || true

@@ -1,0 +1,8 @@
+{
+  "_comment": "Spatial source incidents_part1_part2 (crime). expectedJoinRate is undefined and keyColumns is [] => the source is EXEMPT from the parcel-join gate (validate geom not-null + point-in-city instead). These rows carry geometry, NOT a parcel key. The gate must skip the parcel join entirely and report exempt_spatial.",
+  "rows": [
+    { "cartodb_id": 9001, "geom_geojson": "{\"type\":\"Point\",\"coordinates\":[-75.1652,39.9526]}", "occurred_on": "2026-06-01", "category": "Theft" },
+    { "cartodb_id": 9002, "geom_geojson": "{\"type\":\"Point\",\"coordinates\":[-75.17,39.95]}", "occurred_on": "2026-06-02", "category": "Burglary" },
+    { "cartodb_id": 9003, "geom_geojson": "{\"type\":\"Point\",\"coordinates\":[-75.16,39.96]}", "occurred_on": "2026-06-03", "category": "Assault" }
+  ]
+}

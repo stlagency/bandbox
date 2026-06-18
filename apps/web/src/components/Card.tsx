@@ -1,0 +1,54 @@
+/**
+ * Card — Bone surface, 3px (or 4px "frame") ink border, offset hard shadow,
+ * square corners (DESIGN.md §Components). Optional header in Satoshi-900
+ * small-caps over a 3px divider, with an optional mono "tally" on the right.
+ */
+import type { HTMLAttributes } from 'react';
+
+export interface CardProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
+  /** Card header label (left). */
+  title?: React.ReactNode;
+  /** Mono tally shown right of the title, e.g. "N = 4 · 12 MO". */
+  tally?: React.ReactNode;
+  /** id for the header, to wire aria-labelledby. */
+  headingId?: string;
+  /** Promote to a 4px primary-region frame. */
+  frame?: boolean;
+  /** Use the 10px page-defining mass shadow. */
+  mass?: boolean;
+  /** Render as <section> (default <section>); allows aria-labelledby. */
+  as?: 'section' | 'div';
+}
+
+export function Card({
+  title,
+  tally,
+  headingId,
+  frame = false,
+  mass = false,
+  as = 'section',
+  className,
+  children,
+  ...rest
+}: CardProps) {
+  const cls = [
+    'pb-cardbox',
+    frame ? 'pb-cardbox--frame' : '',
+    mass ? 'pb-cardbox--mass' : '',
+    className ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const Tag = as;
+  return (
+    <Tag className={cls} {...rest}>
+      {title ? (
+        <h2 className="pb-card-head" id={headingId}>
+          <span>{title}</span>
+          {tally ? <span className="pb-tally">{tally}</span> : null}
+        </h2>
+      ) : null}
+      {children}
+    </Tag>
+  );
+}

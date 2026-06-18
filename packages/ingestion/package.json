@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:live": "vitest run --mode live",
-    "run:nightly": "node --experimental-strip-types src/run.ts"
+    "run:nightly": "tsx src/run.ts"
   },
   "dependencies": {
     "@phillybricks/core": "workspace:*",

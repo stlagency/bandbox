@@ -19,12 +19,13 @@
     "gate:security": "node infra/scripts/security-gate.mjs",
     "gate:literals": "node infra/scripts/document-type-literals.mjs",
     "gates": "pnpm gate:portability && pnpm gate:security",
-    "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm gates"
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm gates"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   },

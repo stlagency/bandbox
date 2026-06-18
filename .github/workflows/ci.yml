@@ -1,0 +1,173 @@
+# PhillyBricks CI (PRD §8 — quality gates + the adversarial security/portability gates).
+#
+# On every push / PR:
+#   - quality:        typecheck + lint + unit tests
+#   - gates:          portability grep + STATIC security gate (fast path)
+#   - secrets:        gitleaks (full history) with .gitleaks.toml
+#   - security-gate-live:
+#       spins a real PostGIS, runs the migrations against it, then introspects
+#       pg_catalog (infra/scripts/security-gate-live.mjs) — the REAL enforcement
+#       of the RLS/grant matrix. Also re-runs the static gate for symmetry.
+#
+# All jobs run on the standard GitHub-hosted ubuntu runner. pnpm + Node 20.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pin pnpm to the repo's packageManager version for reproducibility.
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+  gates:
+    name: Portability · Static security gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Portability gate (no Philly literals outside the adapter)
+        run: pnpm gate:portability
+
+      - name: Security gate (static SQL pass)
+        run: pnpm gate:security
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          # gitleaks scans the FULL history on first publish (PRD §8) — fetch all of it.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          # No GITLEAKS_LICENSE needed for a public repo / individual use.
+
+  security-gate-live:
+    name: Live security gate (pg_catalog introspection)
+    runs-on: ubuntu-latest
+
+    # A real PostGIS so the migrations + grant matrix are exercised exactly as prod.
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # Wait until Postgres accepts connections before any step runs.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # localhost DATABASE_URL pointing at the service container (PRD §8 / task spec).
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for PostGIS to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then
+              echo "PostGIS is ready."
+              exit 0
+            fi
+            echo "Waiting for PostGIS... ($i)"
+            sleep 2
+          done
+          echo "PostGIS did not become ready in time." >&2
+          exit 1
+
+      - name: Run migrations against PostGIS
+        # The @phillybricks/db package owns the migration runner
+        # (node packages/db/src/migrate.ts); invoke it via its own script so the
+        # runtime flags / entrypoint stay the db package's responsibility.
+        run: pnpm --filter @phillybricks/db migrate
+
+      - name: Static security gate (fast path, re-checked here)
+        run: pnpm gate:security
+
+      - name: LIVE security gate (introspect pg_catalog)
+        run: node infra/scripts/security-gate-live.mjs

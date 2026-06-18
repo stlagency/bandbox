@@ -1,0 +1,15 @@
+{
+  "_comment": "RTT historic slice (rtt_summary). Source threshold expectedJoinRate=0.6. Of 10 rows, only 3 opa_account_num values exist in parcel_index (rate 0.30 < 0.60), pin is 13-digit and never normalizes (0.00). Best path 0.30 < 0.60 => the gate QUARANTINES this batch + alerts, but the run must NOT halt. Mirrors the documented ~60% historic RTT->OPA join with a sub-threshold slice.",
+  "rows": [
+    { "cartodb_id": 101, "opa_account_num": "523045600", "pin": "1001523045600", "document_type": "DEED", "total_consideration": 250000 },
+    { "cartodb_id": 102, "opa_account_num": "351243300", "pin": "1001351243300", "document_type": "DEED", "total_consideration": 310000 },
+    { "cartodb_id": 103, "opa_account_num": "881000000", "pin": "1001881000000", "document_type": "DEED", "total_consideration": 540000 },
+    { "cartodb_id": 104, "opa_account_num": "777666555", "pin": "1001777666555", "document_type": "DEED", "total_consideration": 190000 },
+    { "cartodb_id": 105, "opa_account_num": "666555444", "pin": "1001666555444", "document_type": "DEED", "total_consideration": 205000 },
+    { "cartodb_id": 106, "opa_account_num": "555444333", "pin": "1001555444333", "document_type": "DEED", "total_consideration": 215000 },
+    { "cartodb_id": 107, "opa_account_num": "444333222", "pin": "1001444333222", "document_type": "DEED", "total_consideration": 225000 },
+    { "cartodb_id": 108, "opa_account_num": "333222111", "pin": "1001333222111", "document_type": "DEED", "total_consideration": 235000 },
+    { "cartodb_id": 109, "opa_account_num": "222111000", "pin": "1001222111000", "document_type": "DEED", "total_consideration": 245000 },
+    { "cartodb_id": 110, "opa_account_num": "111000999", "pin": "1001111000999", "document_type": "DEED", "total_consideration": 255000 }
+  ]
+}

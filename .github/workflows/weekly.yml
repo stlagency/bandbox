@@ -1,0 +1,89 @@
+# PhillyBricks weekly jobs (PRD §4.2, §10).
+#
+# Two weekly responsibilities the nightly cadence deliberately does NOT carry:
+#   1. Sheriff scrape — the city sheriff's mortgage + foreclosure listings (cheerio).
+#      The source host lives in the CityAdapter scraper config, never here. Weekly
+#      cadence keeps the polite-scraping footprint small; the worker itself HONORS
+#      the robots Crawl-delay (10s, PRD §4.2) — the workflow just schedules it.
+#      Bid4Assets enrichment stays OFF by default in the public repo.
+#   2. RTT full keyset re-sync — a weekly full `cartodb_id` keyset pass over the
+#      transfer source to HEAL pagination gaps the incremental watermark can miss
+#      (PRD §4.2: deeds arrive back-dated; recording_date is non-unique). Reconciles
+#      row counts to Carto count(*).
+#
+# Cadence: Mondays 08:40 UTC — ahead of the week's nightly runs, off the top of hour.
+
+name: Weekly resync
+
+on:
+  schedule:
+    # min hour dom mon dow (UTC). 08:40 every Monday.
+    - cron: '40 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you running the weekly resync manually?'
+        required: false
+        default: 'manual run'
+
+concurrency:
+  group: weekly-resync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  weekly:
+    name: Sheriff scrape · RTT full re-sync
+    runs-on: ubuntu-latest
+    # Crawl-delay-respecting scrape + a full keyset re-sync can be long; cap at 6h
+    # to match the nightly budget. The re-sync is cursor-resumable.
+    timeout-minutes: 360
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      HEALTHCHECKS_WEEKLY_URL: ${{ secrets.HEALTHCHECKS_WEEKLY_URL }}
+      # Bid4Assets enrichment OFF by default in the public repo (PRD §4.2).
+      ENABLE_BID4ASSETS_ENRICHMENT: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Liveness — signal weekly run start
+        if: ${{ env.HEALTHCHECKS_WEEKLY_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_WEEKLY_URL}/start" || true
+
+      # Sheriff scraper (honors Crawl-delay: 10 inside the worker). The CLI surface
+      # belongs to @phillybricks/ingestion; we drive it with a --weekly task flag.
+      - name: Sheriff scrape (mortgage + foreclosure)
+        run: pnpm --filter @phillybricks/ingestion run:nightly --task=sheriff
+
+      # RTT full keyset re-sync — heals gaps, reconciles to Carto count(*).
+      - name: RTT full keyset re-sync
+        run: pnpm --filter @phillybricks/ingestion run:nightly --task=rtt-resync
+
+      - name: Liveness — ping weekly monitor on success
+        if: ${{ success() && env.HEALTHCHECKS_WEEKLY_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_WEEKLY_URL}"
+
+      - name: Liveness — signal weekly failure
+        if: ${{ failure() && env.HEALTHCHECKS_WEEKLY_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_WEEKLY_URL}/fail" || true
