@@ -146,27 +146,64 @@ export function computeSoftRetire(
   return retire;
 }
 
-/** `globalThis.fetch`-backed OpaHttp. Imported by run.ts; never used in unit tests. */
-export function fetchOpaHttp(): OpaHttp {
+/** Default per-request network timeout (ms) for the live OPA transport. */
+export const DEFAULT_OPA_TIMEOUT_MS = 30_000;
+
+export interface FetchOpaHttpOptions {
+  /**
+   * Per-request network timeout in ms (default 30_000). Bounds the connection /
+   * response-head phase of each call so a STALLING S3 host (no response) can't
+   * hang the SERIAL nightly indefinitely with no `failed` status and no alert.
+   * NOTE: for `getStream` the timer is cleared once the response head arrives —
+   * it guards connect/TTFB, it deliberately does NOT cap the (legitimately large,
+   * ~303 MB) body transfer that the caller streams afterward.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * `globalThis.fetch`-backed OpaHttp. Imported by run.ts; never used in unit tests.
+ *
+ * Both transports wrap fetch in an AbortController + timeout (mirrors
+ * `carto.ts` and `scrape.ts`'s `makeDefaultHttpGet`): without it a stalling host
+ * would block the serial nightly with no `failed` status; the abort turns the
+ * stall into a reject the orchestrator can record + alert on.
+ */
+export function fetchOpaHttp(opts: FetchOpaHttpOptions = {}): OpaHttp {
   const f = globalThis.fetch;
   if (typeof f !== 'function') throw new Error('global fetch unavailable');
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_OPA_TIMEOUT_MS;
   return {
     async head(url: string): Promise<S3Head> {
-      const res = await f(url, { method: 'HEAD' });
-      const lm = res.headers.get('last-modified');
-      const cl = res.headers.get('content-length');
-      return {
-        lastModifiedMs: lm ? Date.parse(lm) || null : null,
-        contentLength: cl ? Number(cl) : null,
-      };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await f(url, { method: 'HEAD', signal: controller.signal });
+        const lm = res.headers.get('last-modified');
+        const cl = res.headers.get('content-length');
+        return {
+          lastModifiedMs: lm ? Date.parse(lm) || null : null,
+          contentLength: cl ? Number(cl) : null,
+        };
+      } finally {
+        clearTimeout(timer);
+      }
     },
     async getStream(url: string): Promise<Readable> {
-      const res = await f(url);
-      if (!res.ok || res.body === null) {
-        throw new Error(`OPA CSV HTTP ${res.status} ${res.statusText}`);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await f(url, { signal: controller.signal });
+        if (!res.ok || res.body === null) {
+          throw new Error(`OPA CSV HTTP ${res.status} ${res.statusText}`);
+        }
+        // Web ReadableStream → Node Readable.
+        return Readable.fromWeb(res.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
+      } finally {
+        // Timer cleared once the head is in hand — guards connect/TTFB only, so a
+        // legitimate multi-hundred-MB stream is not capped at `timeoutMs`.
+        clearTimeout(timer);
       }
-      // Web ReadableStream → Node Readable.
-      return Readable.fromWeb(res.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
     },
   };
 }
