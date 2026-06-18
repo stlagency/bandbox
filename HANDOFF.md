@@ -9,7 +9,9 @@ Open-source (AGPL), transparency-first **Philadelphia residential real-estate ma
 | Engineering plan | **`PRD.md` v1.1** — adversarially reviewed |
 | Design system | **Unified & verified** — `design/DESIGN.md` + `TOKENS.css` + `design/mockups/` ("The Survey Table, Warmed") |
 | Verified data facts | **In-repo** — `docs/DATA_SOURCES.md` |
-| Code | **None yet.** Next = build M0→M7. |
+| Code | **M0 done; M1 in progress.** Public repo (github.com/stlagency/phillybricks), CI green, prod Supabase live + migrated + RLS-verified, worker reaches it via the transaction pooler. |
+
+> **▶ Resume here:** `docs/NEXT_SESSION.md` — finish M1 (wire `run.ts` source registries, OPA-first, measure join rates) so the nightly ingests and change-logs accrue. Live status: `STATUS.md`.
 
 ## Read order (cold start — do this first)
 1. **`PRD.md`** — engineering source of truth (the HOW; data model, ingestion, API, milestones M0–M7 with DoDs).
@@ -27,10 +29,9 @@ Run it as an **ultracode multi-agent workflow**, **ingestion-first** (M0 → M1,
 ## Cost & infra
 ~**$45/mo** (Supabase Pro $25 + Vercel Pro $20; R2/Actions/Resend free-tier). Backups: **7-day RPO** (no PITR for v1). Stack: Next on Vercel · Supabase Postgres+PostGIS · MapLibre+deck.gl · Cloudflare R2 (PMTiles) · GitHub Actions cron ingestion. Monorepo (pnpm), TypeScript end-to-end.
 
-## Human pause-points (need Aaron's keyboard — everything else is autonomous)
-- **Create the Supabase Pro project** under org **"STL Agentic"** (us-east-1; enable PostGIS) — confirm the paid $25/mo before creating; capture the project ref + pooled `DATABASE_URL`.
-- **Stripe** + **Resend** dashboard API keys.
-- **GitHub**: create the public AGPL repo; enable secret scanning + push protection.
+## Human pause-points (most now resolved — everything else is autonomous)
+- ~~Supabase Pro project + `DATABASE_URL`~~ ✅ done (ref `ctcvrdsrylauqpuxbauz`, +$10/mo marginal). ~~GitHub public repo + secret scanning/push protection~~ ✅ done.
+- **Vercel Pro** project + env — at M4. **R2** bucket + keys — at M4. **Stripe** + **Resend** keys — at M7. **healthchecks.io** URL — anytime.
 
 ## Archived / superseded (do not build from these)
 `design/_archive/` holds the earlier "Rowhouse" mockups + the pure-brutalist `brand-presenter.html` and the stale `design-system-rowhouse.json`. They're kept for history; the **unified** system in `design/DESIGN.md` supersedes them.
