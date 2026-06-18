@@ -28,6 +28,7 @@ import {
   type IngestStatus,
 } from './ingestRun.js';
 import { makeCartoFetcher, makeOpaFetcher } from './fetchers.js';
+import { makeScrapeFetcher } from './adapters/scrape.js';
 import { makeStepsForSpec } from './steps.js';
 import {
   runSourcePipeline,
@@ -58,6 +59,37 @@ export interface SourceRunReport {
 /** True for the bulk-snapshot spine source (defines parcels; join-gate-exempt). */
 function isSpine(spec: SourceSpec): boolean {
   return spec.platform === 's3';
+}
+
+/** True for a scraped source (full re-scrape; gated by column-order, not parcel-join). */
+function isScrape(spec: SourceSpec): boolean {
+  return spec.platform === 'scrape';
+}
+
+/**
+ * Run a scraped source (sheriff listings). A full idempotent re-scrape: the fetcher
+ * has already asserted the column order (its integrity gate) and parsed every row, so
+ * we just upsert on the stable `listing_id` (no join-rate gate, no soft-retire, no
+ * keyset cursor). Post-promote diff/refresh are no-ops in M1 (sheriff feeds the M3
+ * distress_signal matview directly). An empty scrape is a clean no-op.
+ */
+async function runScrapeSource(
+  db: DbClient,
+  spec: SourceSpec,
+  batch: StagedBatch,
+  steps: SourceSteps,
+  hooks: PipelineHooks,
+  runId: number,
+): Promise<SourceRunReport> {
+  const rowsIn = batch.rows.length;
+  const rowsPromoted = await db.begin((tx) => steps.promote(tx, batch, null));
+  if (rowsIn > 0) {
+    await steps.diff(db, batch);
+    await steps.refreshDerived(db);
+    await Promise.resolve(hooks.triggerTileBuild(spec.name));
+  }
+  await closeIngestRun(db, { id: runId, status: 'success', rowsIn, rowsPromoted });
+  return { source: spec.name, status: 'success', rowsIn, rowsPromoted };
 }
 
 /**
@@ -114,6 +146,11 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
         if (report.status === 'success' && batch.rows.length > 0) {
           parcelIndex = await loadParcelKeyIndex(db);
         }
+        continue;
+      }
+
+      if (isScrape(spec)) {
+        reports.push(await runScrapeSource(db, spec, batch, steps, deps.hooks, runId));
         continue;
       }
 
@@ -185,9 +222,17 @@ export const consoleHooks: PipelineHooks = {
 export function buildRegistries(maxPages?: number): Pick<WorkerDeps, 'fetchers' | 'stepsBySource'> {
   const fetchers: Record<string, SourceFetcher> = {};
   const stepsBySource: Record<string, SourceSteps> = {};
+  const scraper = philadelphia.scraper;
   for (const spec of philadelphia.sources) {
     if (!spec.mapping) continue;
-    fetchers[spec.name] = isSpine(spec) ? makeOpaFetcher() : makeCartoFetcher({ maxPages });
+    if (isScrape(spec)) {
+      // A scrape source needs its ScraperSpec (pages + expected columns). Without it
+      // the source is left unwired and reported `skipped` by runWorker.
+      if (!scraper || scraper.sourceName !== spec.name) continue;
+      fetchers[spec.name] = makeScrapeFetcher(scraper);
+    } else {
+      fetchers[spec.name] = isSpine(spec) ? makeOpaFetcher() : makeCartoFetcher({ maxPages });
+    }
     stepsBySource[spec.name] = makeStepsForSpec(spec);
   }
   return { fetchers, stepsBySource };

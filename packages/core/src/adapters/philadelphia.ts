@@ -503,6 +503,66 @@ const serviceRequestMapping: SourceMapping = {
 };
 
 /**
+ * Sheriff-sale listings → public.sheriff_listing (PRD §3.2, §4.2). SCRAPED — forward
+ * auctions are not in open data. The raw row is the positional Ninja-Table cells keyed
+ * by the asserted header (`ID`/`BooknWrit`/`AssessmentID`/`Street`/`SaleType`/
+ * `SaleStatus`/`SaleDate`), PLUS two fields the generic scrape fetcher injects:
+ * `__sale_type` (the page-derived canonical sale_type) and `__source_url` (the page).
+ *
+ * `listing_id` grain is (AssessmentID, BooknWrit, sale_status, sale_date) — VERIFIED
+ * collision-free on the live source (2026-06-18; 0 of 1576 rows). The SAME writ
+ * legitimately appears as BOTH a 'preview' and a 'postponed' listing, often at
+ * different sale dates (a real, repeatable distress signal); a coarser
+ * (AssessmentID, BooknWrit) key silently DROPPED ~27% of distinct listings via the
+ * upsert's last-wins dedup. The internal `ID` column is NOT used — it both churns
+ * across scrapes AND itself collides (21×) in the live data. The DIRTY-AssessmentID
+ * rule (anticipated in norm-parcel.test.ts):
+ * a parcel key is derived ONLY from a clean ALL-DIGIT AssessmentID — an alpha/garbage
+ * id is KEPT verbatim in `raw_assessment_id` with parcel_pk = NULL, never coerced. (A
+ * bare normParcelKey would strip letters — '2502T0123' → '025020123' — forging a false
+ * 9-digit join; the all-digit guard here prevents that.) `sale_type` comes from the page,
+ * `source_sale_type` preserves the raw SaleType (Linebarger/GRB/TAX…). plaintiff/
+ * opening_bid/judgment/attorney/enrichment_status stay NULL (Bid4Assets enrichment, off).
+ */
+const sheriffMapping: SourceMapping = {
+  targetTable: 'public.sheriff_listing',
+  targetColumns: [
+    'listing_id', 'parcel_pk', 'raw_assessment_id', 'sale_type', 'source_sale_type',
+    'sale_status', 'sale_date', 'street', 'book_writ', 'source_url',
+  ],
+  conflictColumns: ['listing_id'],
+  mapRow(raw) {
+    const assessment = asText(raw.AssessmentID);
+    const bookWrit = asText(raw.BooknWrit);
+    if (assessment === null && bookWrit === null) return null; // no stable id possible
+    // Dirty-AssessmentID rule: only a clean all-digit id becomes a parcel key.
+    const parcel_pk = assessment !== null && /^\d+$/.test(assessment) ? normParcelKey(assessment) : null;
+    const status = asText(raw.SaleStatus);
+    const sale_status = status === null ? null : status.toLowerCase();
+    const sale_date = asDate(raw.SaleDate);
+    const sale_type = asText(raw.__sale_type); // page-derived (injected by the scrape fetcher)
+    // Grain = page sale_type + assessment + writ + status + date. status/date keep a
+    // preview and a (re)postponed listing of the same writ distinct (live recon, doc above);
+    // the leading sale_type guarantees a mortgage vs tax listing can never collide even if a
+    // writ number were ever reused across the two calendars (the pages share no key today).
+    const listing_id =
+      `sheriff:${sale_type ?? 'na'}:${assessment ?? 'na'}:${bookWrit ?? 'na'}:${sale_status ?? 'na'}:${sale_date ?? 'na'}`;
+    return {
+      listing_id,
+      parcel_pk,
+      raw_assessment_id: assessment,
+      sale_type,
+      source_sale_type: asText(raw.SaleType),
+      sale_status,
+      sale_date,
+      street: asText(raw.Street),
+      book_writ: bookWrit,
+      source_url: asText(raw.__source_url),
+    };
+  },
+};
+
+/**
  * Source adapters (PRD §4.2). `keyColumns` are CANDIDATE parcel-key columns to
  * normalize and try, in priority order — the join is empirical (PRD §3.1).
  * Carto sources paginate by keyset on `cartodb_id`. Spatial sources (crime/311)
@@ -713,6 +773,24 @@ const sources: SourceSpec[] = [
     mapping: businessLicenseMapping,
     notes: '431K rows (Carto full, weekly). PK licensenum. is_rental = licensetype Rental. parcel_pk often null (non-addressed).',
   },
+  {
+    // Forward sheriff auctions — NOT in open data; scraped from phillysheriff.com.
+    // Full re-scrape each run (idempotent upsert on listing_id); no keyset cursor.
+    // The integrity gate is the <thead> column-order assertion in the scrape fetcher
+    // (positional cells have no keys) — NOT the parcel-join gate, so expectedJoinRate
+    // is undefined and this source takes a dedicated scrape path in run.ts.
+    name: 'sheriff_sales',
+    platform: 'scrape',
+    endpoint: 'https://phillysheriff.com/',
+    keyColumns: ['AssessmentID'],
+    geometryMode: 'none',
+    cadence: 'weekly',
+    expectedJoinRate: undefined,
+    targetTable: 'public.sheriff_listing',
+    mapping: sheriffMapping,
+    notes:
+      'mortgage page (~909, all MORTGAGE FORECLOSURE) + foreclosure/tax page (~667). sale_type derived from page; source_sale_type = raw. AssessmentID is a clean 9-digit OPA → parcel_pk. robots Crawl-delay 10.',
+  },
 ];
 
 /**
@@ -756,7 +834,16 @@ const geoSources: GeoSourceSpec[] = [
  * NOTE: each page renders TWO theads (a clone/sticky header) — assert against the first.
  */
 const scraper: ScraperSpec = {
-  urls: ['https://phillysheriff.com/mortgage/', 'https://phillysheriff.com/foreclosure/'],
+  sourceName: 'sheriff_sales',
+  // NON-www host (www 301-redirects). sale_type DERIVED per page (not from a column):
+  // the mortgage page is all 'mortgage', the foreclosure page is 'tax' sales.
+  // minRows floors are ~10× below the live volumes (mortgage ≈909, tax ≈667 on
+  // 2026-06-18); a drop below them means the tbody markup changed (a 0-row parse with
+  // an intact header) and the fetch fails loudly instead of reporting a green no-op.
+  pages: [
+    { url: 'https://phillysheriff.com/mortgage/', saleType: 'mortgage', minRows: 100 },
+    { url: 'https://phillysheriff.com/foreclosure/', saleType: 'tax', minRows: 50 },
+  ],
   expectedColumns: ['ID', 'BooknWrit', 'AssessmentID', 'Street', 'SaleType', 'SaleStatus', 'SaleDate'],
   crawlDelaySec: 10,
 };

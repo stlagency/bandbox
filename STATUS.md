@@ -1,18 +1,18 @@
 # Build status
 
-Ingestion-first per PRD §9. State history (change-logs) only accrues forward and is the one irrecoverable asset. **→ Resume point for the next session: [`docs/NEXT_SESSION.md`](docs/NEXT_SESSION.md) — finish M1 source-registry wiring so the nightly ingests.**
+Ingestion-first per PRD §9. State history (change-logs) only accrues forward and is the one irrecoverable asset. **→ Resume point for the next session: [`docs/NEXT_SESSION.md`](docs/NEXT_SESSION.md) — M3 derived analytics (real distress/comps matviews + matview-ownership fix).**
 
 **Repo:** https://github.com/stlagency/phillybricks (public, AGPL-3.0, secret-scanning + push-protection on).
-**CI:** green — typecheck · lint · tests (355 pass/1 skip) · portability gate · static + **live `pg_catalog` RLS gate** (runs migrations against ephemeral PostGIS) · gitleaks full-history.
-**Prod DB:** Supabase `phillybricks` / ref `ctcvrdsrylauqpuxbauz` (us-east-1, PostGIS, PG17) — all 9 migrations applied + RLS verified live. Worker role `phillybricks_worker` reaches it via the transaction pooler; `DATABASE_URL` is a GH Actions secret (+ `memory/database-url.secret` local). Dispatched nightly = green (`0 promoted, 14 skipped, 0 failed`) — connects, skips unwired sources, heartbeat commits.
+**CI:** green — typecheck · lint · tests (443 pass/1 skip) · portability gate · static + **live `pg_catalog` RLS gate** (runs migrations against ephemeral PostGIS) · gitleaks full-history.
+**Prod DB:** Supabase `phillybricks` / ref `ctcvrdsrylauqpuxbauz` (us-east-1, PostGIS, PG17) — all 10 migrations applied + RLS verified live. Worker role `phillybricks_worker` reaches it via the transaction pooler; `DATABASE_URL` is a GH Actions secret (+ `memory/database-url.secret` local). Nightly ingests all 14 open-data sources + the sheriff scraper; `parcel_change_log` history accruing (2.3M baseline), `sheriff_listing`=1,576.
 
 | Milestone | What | State |
 |---|---|---|
 | **M0** | Foundations: monorepo, AGPL, secret hygiene, CI gates, frozen contracts, CityAdapter + philadelphia adapter, 9 migrations (applied + RLS-verified on prod), backup posture | ✅ **done** |
-| **M1** | Ingestion core (norm_parcel, gate, pipeline, adapters, ops logging) = built + tested. **NEXT: wire `run.ts` source registries (OPA-first) + measure per-source join rates → set thresholds → nightly ingests, change-logs accrue.** See `docs/NEXT_SESSION.md`. | 🔜 in progress — core done, source wiring next |
-| **M1a** | RTT backfill to 1974 (resumable keyset) | ⏳ |
-| **M2** | Sheriff scraper (phillysheriff core; Bid4Assets OFF by default) | ⏳ |
-| **M3** | Derived analytics: distress signal + composite, comp_candidate, incremental geo_metric, geo_boundary | ⏳ |
+| **M1** | Ingestion core wired live: all 14 sources ingest, per-source join rates measured + thresholds set, `parcel_change_log` accruing (2.3M baseline), nightly green end-to-end | ✅ **done** |
+| **M1a** | RTT backfill to 1974 (resumable keyset) | 🔄 running (re-runnable to `drained`) |
+| **M2** | Sheriff scraper (phillysheriff, NON-www; generic scrape engine + column-order gate + minRows floor + AbortController timeout; Bid4Assets OFF). Live: `sheriff_listing`=1,576, 1,125 parcels → `on_sheriff_list`. Adversarial review: 7 fixed / 5 dismissed | ✅ **done** |
+| **M3** | Derived analytics: distress signal + composite, comp_candidate, incremental geo_metric, geo_boundary + **matview-ownership/refresh fix** | 🔜 **next** |
 | **M4** | Serving + map: PMTiles → R2, MapLibre 4-lens scan, read APIs | ⏳ |
 | **M5** | Property deep-dive page + bundle endpoint | ⏳ |
 | **M6** | Leads + mini-CRM + CSV export + BYO skip-trace proxy | ⏳ |

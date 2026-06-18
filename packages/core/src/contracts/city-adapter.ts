@@ -92,10 +92,39 @@ export interface GeoSourceSpec {
   nameField?: string;
 }
 
-/** Scraper config — honor robots Crawl-delay; assert column order before parse. */
+/**
+ * One scraped page. `saleType` is the canonical sale_type DERIVED from the page
+ * itself (PRD §4.2) — e.g. the mortgage page is all 'mortgage', the tax page 'tax' —
+ * NOT read from any column. The generic scrape fetcher tags every row it parses from
+ * this page with `url` + `saleType` so the adapter mapping can promote them.
+ */
+export interface ScraperPage {
+  /** Page URL. Use the canonical host (avoid hosts that redirect). */
+  url: string;
+  /** Canonical sale_type stamped on every row from this page (page-derived). */
+  saleType: string;
+  /**
+   * Sanity floor: fewer than this many parsed rows is treated as a structural break
+   * (header intact but tbody markup changed → 0/near-0 rows) and the fetch THROWS, so
+   * a dead/changed page becomes a `failed` run + alert instead of a silent green no-op.
+   * Set well below the normal volume. Omit to disable the floor.
+   */
+  minRows?: number;
+}
+
+/**
+ * Scraper config — honor robots Crawl-delay; assert the column order before parse
+ * (the only safety net when cells are positional). `sourceName` ties this config to
+ * the `SourceSpec` in `sources` that the worker loop drives.
+ */
 export interface ScraperSpec {
-  urls: string[];
+  /** The `SourceSpec.name` (in `sources`) this scraper feeds. */
+  sourceName: string;
+  /** Pages to scrape; each carries its page-derived canonical `saleType`. */
+  pages: ScraperPage[];
+  /** Exact expected `<thead>` column order — assert before parsing; throw on drift. */
   expectedColumns: string[];
+  /** robots.txt Crawl-delay (seconds), honored BETWEEN page fetches. */
   crawlDelaySec: number;
 }
 

@@ -235,3 +235,84 @@ describe('spatial mappings (crime / 311)', () => {
     expect(row.status).toBe('Closed');
   });
 });
+
+describe('sheriff_sales mapping (PRD §3.2, §4.2, §9 DoD)', () => {
+  const m = mapping('sheriff_sales');
+  /** A raw scrape row: positional cells keyed by header + the fetcher's injected page context. */
+  const raw = (over: Record<string, unknown>) => ({
+    ID: '84714', BooknWrit: '2602-371', AssessmentID: '522145900',
+    Street: '5818 WOODCREST AVENUE PHILADELPHIA PA 19131', SaleType: 'MORTGAGE FORECLOSURE',
+    SaleStatus: 'Preview', SaleDate: '2026-07-07',
+    __sale_type: 'mortgage', __source_url: 'https://phillysheriff.test/mortgage/', ...over,
+  });
+
+  it('derives sale_type from the PAGE, preserves the raw SaleType, builds a stable listing_id', () => {
+    const row = m.mapRow(raw({}))!;
+    expect(row.sale_type).toBe('mortgage'); // from the page, NOT the SaleType column
+    expect(row.source_sale_type).toBe('MORTGAGE FORECLOSURE'); // raw preserved
+    // listing_id grain = saleType:assessment:bookwrit:status:date (NOT the volatile internal ID)
+    expect(row.listing_id).toBe('sheriff:mortgage:522145900:2602-371:preview:2026-07-07');
+    expect(row.book_writ).toBe('2602-371');
+    expect(row.source_url).toBe('https://phillysheriff.test/mortgage/');
+  });
+
+  it('a preview and a (re)postponed listing of the SAME writ are DISTINCT rows (live-found collision)', () => {
+    // The live source lists the same AssessmentID+BooknWrit as both a preview and a
+    // postponed sale (often at different dates). A coarse key collapsed ~27% of rows;
+    // status+date in the grain keeps them distinct.
+    const preview = m.mapRow(raw({ SaleStatus: 'Preview', SaleDate: '2026-07-07' }))!;
+    const postponed = m.mapRow(raw({ SaleStatus: 'Postponed', SaleDate: '2026-09-01' }))!;
+    expect(preview.listing_id).not.toBe(postponed.listing_id);
+    expect(postponed.listing_id).toBe('sheriff:mortgage:522145900:2602-371:postponed:2026-09-01');
+  });
+
+  it('a mortgage and a tax listing of the same parcel+writ never collide (sale_type in the grain)', () => {
+    const mort = m.mapRow(raw({ __sale_type: 'mortgage' }))!;
+    const tax = m.mapRow(raw({ __sale_type: 'tax', SaleType: 'Linebarger' }))!;
+    expect(mort.listing_id).not.toBe(tax.listing_id);
+  });
+
+  it('a clean 9-digit AssessmentID becomes parcel_pk (incl. a leading-zero id)', () => {
+    expect(m.mapRow(raw({ AssessmentID: '522145900' }))!.parcel_pk).toBe('522145900');
+    // foreclosure-page leading-zero OPA — preserved, not truncated
+    const z = m.mapRow(raw({ AssessmentID: '022228400', __sale_type: 'tax', SaleType: 'Linebarger' }))!;
+    expect(z.parcel_pk).toBe('022228400');
+    expect(z.sale_type).toBe('tax');
+    expect(z.source_sale_type).toBe('Linebarger');
+  });
+
+  it('lowercases SaleStatus into the core vocab (Postponed → postponed)', () => {
+    expect(m.mapRow(raw({ SaleStatus: 'Postponed' }))!.sale_status).toBe('postponed');
+    expect(m.mapRow(raw({ SaleStatus: 'Preview' }))!.sale_status).toBe('preview');
+  });
+
+  it('DIRTY-AssessmentID rule: an alpha id is KEPT with parcel_pk NULL (never coerced)', () => {
+    // normParcelKey alone would strip the letter ('2502T0123' → '025020123'), forging a
+    // false join. The all-digit guard prevents that — the row is kept for audit.
+    const alpha = m.mapRow(raw({ AssessmentID: '2502T0123' }))!;
+    expect(alpha.parcel_pk).toBeNull();
+    expect(alpha.raw_assessment_id).toBe('2502T0123'); // dirty value preserved
+    expect(alpha.listing_id).toBe('sheriff:mortgage:2502T0123:2602-371:preview:2026-07-07'); // still has a stable id
+    // outright garbage → null parcel_pk, still kept
+    const garbage = m.mapRow(raw({ AssessmentID: 'N/A' }))!;
+    expect(garbage.parcel_pk).toBeNull();
+    expect(garbage.raw_assessment_id).toBe('N/A');
+  });
+
+  it('a >9-digit numeric AssessmentID → parcel_pk NULL (decoy-shape guard, kept)', () => {
+    const big = m.mapRow(raw({ AssessmentID: '1234567890' }))!; // 10 digits
+    expect(big.parcel_pk).toBeNull();
+    expect(big.raw_assessment_id).toBe('1234567890');
+  });
+
+  it('skips a structurally unusable row (no AssessmentID AND no BooknWrit)', () => {
+    expect(m.mapRow(raw({ AssessmentID: '', BooknWrit: '' }))).toBeNull();
+  });
+
+  it('keeps a row with garbage AssessmentID when BooknWrit gives it an id', () => {
+    const row = m.mapRow(raw({ AssessmentID: '', BooknWrit: '2607-301' }))!;
+    expect(row.parcel_pk).toBeNull();
+    expect(row.raw_assessment_id).toBeNull();
+    expect(row.listing_id).toBe('sheriff:mortgage:na:2607-301:preview:2026-07-07');
+  });
+});
