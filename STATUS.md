@@ -2,10 +2,13 @@
 
 Ingestion-first per PRD §9. State history (change-logs) only accrues forward and is the one irrecoverable asset — M1's nightly run must start as soon as the Supabase project exists.
 
+**Repo:** https://github.com/stlagency/phillybricks (public, AGPL-3.0, secret-scanning + push-protection on).
+**CI:** green — typecheck · lint · tests (355 pass/1 skip) · portability gate · static + **live `pg_catalog` RLS gate** (runs migrations against ephemeral PostGIS) · gitleaks full-history.
+
 | Milestone | What | State |
 |---|---|---|
-| **M0** | Foundations: monorepo, AGPL, secret hygiene, CI gates, frozen contracts, CityAdapter skeleton, schemas, backup posture | 🟡 in progress |
-| **M1** | Ingestion core: `norm_parcel` + quarantine + fixtures, OPA/L&I/tax/crime/311/licenses, per-source join-rate gates, `ops` run/cursor logging, Actions cron + keep-alive + healthchecks liveness | ⏳ code-complete pending live DB |
+| **M0** | Foundations: monorepo, AGPL, secret hygiene, CI gates, frozen contracts, CityAdapter + philadelphia adapter, schemas (8 migrations, apply clean vs PostGIS in CI), backup posture | ✅ done (prod DB migration pending live project) |
+| **M1** | Ingestion core: `norm_parcel` + quarantine + fixtures, OPA/L&I/tax/crime/311/licenses, per-source join-rate gates, `ops` run/cursor logging, Actions cron + keep-alive + healthchecks liveness | ⏳ code-complete + unit-tested; pending live DB to run the nightly |
 | **M1a** | RTT backfill to 1974 (resumable keyset) | ⏳ |
 | **M2** | Sheriff scraper (phillysheriff core; Bid4Assets OFF by default) | ⏳ |
 | **M3** | Derived analytics: distress signal + composite, comp_candidate, incremental geo_metric, geo_boundary | ⏳ |
