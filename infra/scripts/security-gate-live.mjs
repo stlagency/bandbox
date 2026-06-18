@@ -73,7 +73,7 @@ try {
     select grantee, table_name, privilege_type
     from information_schema.role_table_grants
     where table_schema = 'public'
-      and grantee = any(${sql.array(EXPOSED_ROLES)})
+      and grantee in ${sql(EXPOSED_ROLES)}
       and privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES')
     order by table_name, grantee, privilege_type
   `;
@@ -92,7 +92,7 @@ try {
     from information_schema.role_table_grants
     where table_schema = 'app'
       and table_name = 'skiptrace_key'
-      and grantee = any(${sql.array(EXPOSED_ROLES)})
+      and grantee in ${sql(EXPOSED_ROLES)}
       and privilege_type = 'SELECT'
   `;
   for (const r of skiptraceTableSelect) {
@@ -105,7 +105,7 @@ try {
     from information_schema.role_column_grants
     where table_schema = 'app'
       and table_name = 'skiptrace_key'
-      and grantee = any(${sql.array(EXPOSED_ROLES)})
+      and grantee in ${sql(EXPOSED_ROLES)}
       and privilege_type = 'SELECT'
   `;
   for (const r of skiptraceColSelect) {
@@ -122,7 +122,7 @@ try {
     select grantee, table_name, privilege_type
     from information_schema.role_table_grants
     where table_schema = 'ops'
-      and grantee = any(${sql.array(EXPOSED_ROLES)})
+      and grantee in ${sql(EXPOSED_ROLES)}
     order by table_name, grantee, privilege_type
   `;
   for (const r of opsGrants) {
@@ -135,7 +135,7 @@ try {
     select grantee, privilege_type
     from information_schema.role_usage_grants
     where object_schema = 'ops'
-      and grantee = any(${sql.array(EXPOSED_ROLES)})
+      and grantee in ${sql(EXPOSED_ROLES)}
   `;
   for (const r of opsSchemaUsage) {
     failures.push(
@@ -159,7 +159,7 @@ try {
     join pg_catalog.pg_class c on c.relname = g.table_name
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
     where g.table_schema = 'public'
-      and g.grantee = any(${sql.array(EXPOSED_ROLES)})
+      and g.grantee in ${sql(EXPOSED_ROLES)}
       and g.privilege_type = 'SELECT'
     order by g.table_name
   `;

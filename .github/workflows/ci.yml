@@ -98,11 +98,18 @@ jobs:
           # gitleaks scans the FULL history on first publish (PRD §8) — fetch all of it.
           fetch-depth: 0
 
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
-          # No GITLEAKS_LICENSE needed for a public repo / individual use.
+      # Run the gitleaks binary directly rather than gitleaks-action@v2: the action's
+      # SARIF/upload post-step exits non-zero even on a clean "no leaks found" scan.
+      # The binary exits 0 = clean, 1 = leaks — deterministic.
+      - name: Install gitleaks
+        run: |
+          GL_VERSION=8.24.3
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VERSION}/gitleaks_${GL_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan full history
+        run: gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --exit-code 1
 
   security-gate-live:
     name: Live security gate (pg_catalog introspection)

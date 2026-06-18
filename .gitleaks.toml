@@ -10,6 +10,9 @@ description = "Placeholders and docs are not leaks"
 paths = [
   '''\.env\.example''',
   '''.*\.md''',
+  '''_fonts/.*''',
+  '''apps/web/public/fonts/.*''',
+  '''.*\.woff2''',
 ]
 regexes = [
   '''REPLACE_ME''',
