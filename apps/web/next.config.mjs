@@ -1,6 +1,15 @@
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // pnpm-workspace monorepo: trace server files from the repo ROOT so Next bundles
+  // the real (de-symlinked) hoisted deps into the standalone output (Vercel's native
+  // monorepo build uses this; required so server file tracing resolves the .pnpm store).
+  outputFileTracingRoot: join(__dirname, '..', '..'),
   // @phillybricks/core ships untranspiled TS via package "exports"; let Next compile it.
   transpilePackages: ['@phillybricks/core'],
   experimental: {

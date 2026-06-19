@@ -51,11 +51,15 @@ All four frozen contracts are served from real M3 data and verified against prod
 - DB access: `lib/db.ts` (server-only `postgres`, reads DATABASE_URL). `next.config.mjs` adds `extensionAlias` (`.js`→`.ts`) so RUNTIME value imports from `@phillybricks/core` resolve (type-only imports don't need it). `lib/distress-row.ts` coerces numeric/bigint matview columns before `scoreDistress`.
 - Local run: `apps/web/.env.local` (gitignored) has DATABASE_URL + NEXT_PUBLIC_SUPABASE_URL/ANON_KEY; `pnpm --filter @phillybricks/web dev`, then the `.claude/launch.json` `web` preview server.
 
-### YOUR TASK — finish M4: map + deploy (needs Vercel Pro + R2)
-1. **Map:** wire `apps/web` `MarketScan` (currently mock `scanByLens`/`pointBreezeDetail`) to `/api/scan` + `/api/boundaries`. DESIGN DECISION needed: real MapLibre choropleth (PRD §7.1) vs. keep the stylized blueprint SVG aesthetic (the mockup) — the mock `HOODS` geo_ids don't match real neighborhood NAMEs, so a real choropleth means a MapLibre rewrite (boundaries need NO R2; only the high-zoom parcel layer does). Add time control (period from `/api/scan`), filters, click geo→rail, click parcel→deep-dive.
-2. **Tiles:** `packages/tiles` (parcel + boundary builders) is BUILT — needs `tippecanoe` on PATH + R2 keys. Single `parcels.pmtiles` + 3 boundary archives, rebuilt nightly after finalize.
-3. **Deploy:** Vercel Pro project + env, then `next build` is already clean.
-- **Human pause-points (M4):** Vercel Pro project + env (`DATABASE_URL` pooled, `SUPABASE_URL=https://ctcvrdsrylauqpuxbauz.supabase.co`, anon/publishable + service_role); R2 bucket + keys.
+### M4 deploy — DONE 2026-06-18 (live)
+- **Live:** https://phillybricks.vercel.app — Vercel project `phillybricks` (id `prj_DiIbXmTug1Qa6DVQm68VRP5kyre1`, team `stlagencys-projects` / `team_3ImQlRRb1pm2aV5oxd5aeL2r`). All 5 read APIs verified serving real prod data on the deployment.
+- **Build:** Vercel NATIVE build (not `--prebuilt`). Project `rootDirectory=apps/web` + `framework=nextjs` (set via the Vercel API — no CLI flag for rootDirectory; the CLI token is at `~/Library/Application Support/com.vercel.cli/auth.json`). Deploy from the REPO ROOT (`vercel deploy --prod --yes`) so the whole pnpm workspace uploads and Vercel installs/builds `apps/web`. `--prebuilt` from `apps/web` FAILS on a `.pnpm/...` symlink ENOENT — don't use it for this monorepo. `next.config.mjs` sets `outputFileTracingRoot` to the repo root for the standalone server-file trace.
+- **Env (production, set via `vercel env add`):** `DATABASE_URL` (pooler), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Redeploy: `vercel pull --yes --environment=production --cwd apps/web` then `vercel deploy --prod --yes` from the repo root. (Git auto-deploy is NOT connected; `vercel git connect` to enable. Preview-env vars not set yet.)
+
+### YOUR TASK — finish M4: tiles + map polish
+1. **Tiles (needs R2 — in progress):** `packages/tiles` (parcel + boundary builders) is BUILT — needs `tippecanoe` on PATH + the R2 env (`R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_BUCKET`). Run after the nightly finalize: single `parcels.pmtiles` + 3 boundary archives. Then add the high-zoom per-parcel layer under the choropleth in `ScanMap` (PMTiles via the `pmtiles` protocol).
+2. **Map polish:** `ScanMap` (MapLibre choropleth) is live but only PIXEL-verified by the user (the headless preview here is 0×0). Add time control (period from `/api/scan`), the filter panel, geo-type zoom switching (neighborhood→zip→tract), and wire the right rail to the clicked geo's real detail (currently still `pointBreezeDetail` mock). Click parcel→`/parcel/[pk]` deep-dive (the page exists; wire it to `/api/parcel/:pk`).
+- **Human pause-points:** R2 bucket + keys (in progress); optional `tippecanoe` on the nightly runner; optional `vercel git connect` for push-to-deploy.
 
 ## After M4 → M5 deep-dive page · M6 leads + BYO skip-trace · M7 accounts + Stripe + alerts (**Stripe + Resend needed**).
 
