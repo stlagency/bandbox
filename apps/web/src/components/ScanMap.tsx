@@ -45,6 +45,45 @@ function useTheme(): 'light' | 'dark' {
   return theme;
 }
 
+/**
+ * A draft-chrome "Reset zoom" control (USER-REQUESTED) that re-fits the map to
+ * PHILLY_BOUNDS. Styled to the instrument palette (draft-navy ground, survey-blue
+ * ink + border, mono caps) so it reads as part of the blueprint, not a stock
+ * MapLibre widget. Placed in the top-left control stack under NavigationControl.
+ */
+function makeResetControl(): maplibregl.IControl {
+  let container: HTMLDivElement;
+  return {
+    onAdd(map) {
+      container = document.createElement('div');
+      container.className = 'maplibregl-ctrl';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.title = 'Reset zoom to Philadelphia';
+      btn.setAttribute('aria-label', 'Reset zoom to Philadelphia');
+      btn.textContent = 'Reset';
+      Object.assign(btn.style, {
+        background: DRAFT_BG,
+        color: DRAFT_LINE,
+        border: `1px solid ${DRAFT_LINE}59`,
+        borderRadius: '4px',
+        padding: '4px 8px',
+        font: '11px var(--pb-font-mono, monospace)',
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
+      } as Partial<CSSStyleDeclaration>);
+      btn.addEventListener('click', () => map.fitBounds(PHILLY_BOUNDS, { padding: 24 }));
+      container.appendChild(btn);
+      return container;
+    },
+    onRemove() {
+      container.remove();
+    },
+  };
+}
+
 /** MapLibre fill-color expression: match the joined `bucket` (0..4) to the lens ramp. */
 function fillColorExpr(ramp: string[]): maplibregl.ExpressionSpecification {
   return [
@@ -85,6 +124,7 @@ export function ScanMap({ lens, geoType = 'neighborhood', onSelect }: ScanMapPro
       dragRotate: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+    map.addControl(makeResetControl(), 'top-left');
     map.on('load', () => {
       mapRef.current = map;
       map.resize(); // container may have sized after init
