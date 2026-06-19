@@ -17,7 +17,7 @@ export interface NavItem {
 const DEFAULT_NAV: NavItem[] = [
   { label: 'Market Scan', href: '/' },
   { label: 'Parcels', href: '/parcel/312015400' },
-  { label: 'Leads', href: '/' },
+  { label: 'Leads', href: '/leads' },
   { label: 'Learn', href: '/' },
 ];
 

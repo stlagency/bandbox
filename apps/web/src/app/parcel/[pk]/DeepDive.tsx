@@ -13,6 +13,7 @@
  * Budget spent — every other action is ink/ghost, danger pills downshift only
  * where they are true signals (delinquent / unsafe), other metrics use sky-tint.
  */
+import { useState } from 'react';
 import type { Comp, ParcelDeepDive } from '@phillybricks/core/contracts';
 import { Wordmark } from '../../../components/Wordmark';
 import { ThemeToggle } from '../../../components/ThemeToggle';
@@ -46,13 +47,27 @@ function usdK(n: number | null): string {
   if (n >= 1000) return `$${Math.round(n / 1000)}K`;
   return `$${n}`;
 }
+/** Format an already-percent value (change_since_sale_pct is in PERCENT units,
+ *  e.g. 87.1 ⇒ "+87%") — do NOT re-scale by 100. */
 function pct(n: number | null): string {
-  return n == null ? '—' : `${n > 0 ? '+' : ''}${Math.round(n * 100)}%`;
+  return n == null ? '—' : `${n > 0 ? '+' : ''}${Math.round(n)}%`;
 }
 function mmYYYY(iso: string | null): string {
   if (!iso) return '—';
   const [y, m] = iso.split('-');
   return `${m} / ${y}`;
+}
+/** Atlas deep link for a parcel's deeds / L&I records (mirror of lib/parcel-query). */
+function atlasUrl(address: string): string {
+  return `https://atlas.phila.gov/${encodeURIComponent(address)}`;
+}
+/** Whole years between an ISO date and today, derived (never hardcoded). */
+function yearsSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return null;
+  const yrs = (Date.now() - then) / (365.25 * 24 * 3600 * 1000);
+  return yrs > 0 ? yrs : null;
 }
 
 const RAIL_STATIC: ContextRailProps['staticBlocks'] = [
@@ -66,7 +81,7 @@ const RAIL_STATIC: ContextRailProps['staticBlocks'] = [
   {
     term: 'SOURCE STAMPS',
     body:
-      "Every figure on this page carries its origin. [OPA] is the assessor, [RTT] is the recorded deed, [L&I] is licenses & inspections, [REV] is the Revenue Dept, [SHERIFF '03] is the 2003 sheriff sale. Numbers don't lie — people do. Here's the record.",
+      "Every figure on this page carries its origin. [OPA] is the assessor, [RTT] is the recorded deed, [L&I] is licenses & inspections, [REV] is the Revenue Dept, [SHERIFF] is a sheriff-sale record. Numbers don't lie — people do. Here's the record.",
   },
 ];
 
@@ -109,30 +124,201 @@ function curateComps(comps: Comp[], cap: number): Comp[] {
   return out.sort((a, b) => a.reason.distance_mi - b.reason.distance_mi);
 }
 
+/**
+ * L&I status strings are free-text and wildly inconsistent (OPEN, Issued,
+ * COMPLIED, RESOLVE, CLOSEDCASE, Cancelled, null …). Rather than match exact
+ * literals, classify tolerantly: a record is "closed/resolved" if its status
+ * contains any settled token; everything else (incl. null/empty) is treated as
+ * still-open. Keeps the page honest without inventing a status we don't have.
+ */
+const CLOSED_TOKENS = [
+  'close',
+  'complied',
+  'comply',
+  'cmply',
+  'compexcp',
+  'resolve',
+  'complete',
+  'cancel',
+  'expired',
+  'revoked',
+  'abandoned',
+  'denied',
+  'refused',
+  'demolish',
+  'error',
+];
+function isClosedStatus(status: string | null): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return CLOSED_TOKENS.some((t) => s.includes(t));
+}
+/** A permit reads as "open" when it is issued/active and not settled. */
+function isOpenPermit(l: ParcelDeepDive['li'][number]): boolean {
+  return l.kind === 'permit' && !isClosedStatus(l.status);
+}
+/** A violation reads as "open" when it is not settled (incl. null status). */
+function isOpenViolation(l: ParcelDeepDive['li'][number]): boolean {
+  return l.kind === 'violation' && !isClosedStatus(l.status);
+}
+
+/** A distress component is "weighing on" the parcel when it adds points. */
+function contributingLabels(data: ParcelDeepDive): string[] {
+  return data.distress.components
+    .filter((c) => c.contribution > 0)
+    .sort((x, y) => y.contribution - x.contribution)
+    .map((c) => c.label.toLowerCase());
+}
+
+/** Has a given distress component present + contributing? (gates honest copy). */
+function hasSignal(data: ParcelDeepDive, key: string): boolean {
+  return data.distress.components.some((c) => c.component === key && c.contribution > 0);
+}
+
 export function DeepDive({ data }: { data: ParcelDeepDive }) {
   const p = data.parcel;
   const a = data.assessment_vs_sale;
-  const subaddr =
-    `OPA ${p.parcel_pk}` +
-    (p.lat != null && p.lon != null ? ` · LAT ${p.lat} LON ${p.lon}` : '') +
-    ` · ${p.category_code === '1' ? 'ROW' : (p.category_code ?? '—')}` +
-    (p.beds != null ? ` · ${p.beds}BR/1BA` : '') +
-    (p.livable_area != null ? ` · ${p.livable_area.toLocaleString('en-US')} SF` : '');
+  // Only clauses where the value actually exists — no guessed ROW/1BA defaults.
+  const subaddr = [
+    `OPA ${p.parcel_pk}`,
+    p.lat != null && p.lon != null ? `LAT ${p.lat} LON ${p.lon}` : null,
+    p.zoning ? `ZONING ${p.zoning}` : null,
+    p.beds != null ? `${p.beds} BR` : null,
+    p.livable_area != null ? `${p.livable_area.toLocaleString('en-US')} SF` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const shownComps = curateComps(data.comps.comps, COMP_DISPLAY_CAP);
   const totalTrimmed = data.comps.distribution.n_trimmed;
 
-  const openPermit = data.li.find((l) => l.kind === 'permit' && l.status === 'open');
-  const openViolation = data.li.find((l) => l.kind === 'violation' && l.status === 'open');
+  // L&I — type/latest from the real records (li array is already date-desc).
+  const openPermit = data.li.find(isOpenPermit);
+  const openViolations = data.li.filter(isOpenViolation);
+  const openViolation = openViolations[0];
+  // COUNT comes from the authoritative distress matview component (uncapped), not
+  // the li array (parcel-query caps it) — so this never undercounts or contradicts
+  // the distress card's open-violations figure on the same page.
+  const openViolComponent = data.distress.components.find((c) => c.component === 'open_violations');
+  const openViolationCount =
+    typeof openViolComponent?.raw_value === 'number'
+      ? openViolComponent.raw_value
+      : openViolations.length;
   const closedViolations = data.li.filter(
-    (l) => l.kind === 'violation' && l.status === 'closed',
+    (l) => l.kind === 'violation' && isClosedStatus(l.status),
   ).length;
+
+  // Comps — radius + recency describe the FULL trimmed pool the estimate uses (N =
+  // n_trimmed), NOT just the curated 8 we paint, so the "≤ X mi · ≤ Y MO" bounds
+  // match the N they sit beside.
+  const maxDist = data.comps.comps.length
+    ? Math.max(...data.comps.comps.map((c) => c.reason.distance_mi))
+    : 0;
+  const compBarMax =
+    Math.max(
+      ...shownComps.map((c) => c.price_per_sqft ?? 0),
+      data.comps.distribution.p95 ?? 0,
+    ) || 1;
+  const oldestCompDate = data.comps.comps.reduce<string | null>(
+    (oldest, c) => (oldest === null || c.sale_date < oldest ? c.sale_date : oldest),
+    null,
+  );
+  const compMonths = (() => {
+    const yrs = yearsSince(oldestCompDate);
+    return yrs == null ? null : Math.max(1, Math.ceil(yrs * 12));
+  })();
+
+  // "Change since last sale" copy, derived from the real sale_date.
+  const saleYears = yearsSince(p.sale_date);
+  const changeSub = (() => {
+    if (a.change_since_sale_pct == null) return 'no arms-length sale on record';
+    if (saleYears == null || saleYears < 1) return null;
+    const yrs = Math.round(saleYears);
+    // Compounded annual growth from the real total change over the real span.
+    const annual =
+      Math.round((Math.pow(1 + a.change_since_sale_pct / 100, 1 / saleYears) - 1) * 1000) / 10;
+    return `over ${yrs} yr${yrs === 1 ? '' : 's'} · ~${annual}% / yr`;
+  })();
+
+  // Distress intro — generated from the contributing components (top 3).
+  const distressIntro = (() => {
+    const labels = contributingLabels(data).slice(0, 3);
+    if (labels.length === 0) {
+      return 'Nothing in the public record flags this parcel as distressed.';
+    }
+    const count = ['One thing', 'Two things', 'Three things'][labels.length - 1];
+    const verb = labels.length === 1 ? 'weighs' : 'weigh';
+    const joined =
+      labels.length === 1
+        ? labels[0]
+        : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+    return `${count} ${verb} on this parcel: ${joined}. Tap a segment to see the receipt.`;
+  })();
+
+  // Community-signal copy — recovery (not flip) framing, every clause gated on a
+  // REAL signal/field. No fabricated counts, no invented vacancy duration.
+  const communityCopy = (() => {
+    const where = p.neighborhood_name ? `on ${p.neighborhood_name}` : 'on this block';
+    const clauses: string[] = [];
+    if (hasSignal(data, 'vacancy_proxy')) clauses.push('reads as vacant in the public record');
+    if (hasSignal(data, 'tax_delinquent')) clauses.push("it's behind on taxes");
+    const lead =
+      clauses.length > 0
+        ? `This one ${where} ${clauses.join(' and ')}`
+        : `This one ${where} is quiet in the record`;
+    const age = p.year_built ? ` The bones go back to ${p.year_built}.` : '';
+    return `${lead}. Bring it back and that's a home returned to the block, not another shell — recovery, not a flip.${age}`;
+  })();
+
+  // Tax card freshness copy, derived from real status + balance.
+  const taxBalance = data.tax.balance_with_penalty.value;
+  const taxFreshness =
+    data.tax.status === 'delinquent' && taxBalance != null
+      ? `Owes ${usd(taxBalance)} in back taxes · Revenue Dept, refreshed nightly.`
+      : data.tax.status === 'current'
+        ? 'No delinquency on record · Revenue Dept.'
+        : 'No Revenue Dept delinquency record for this parcel.';
+
+  // Save-this-lead inline state (no new imports; plain fetch).
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'signin' | 'error'>(
+    'idle',
+  );
+  async function saveLead() {
+    if (saveState === 'saving' || saveState === 'saved') return;
+    setSaveState('saving');
+    try {
+      const res = await fetch('/api/leads/save', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ parcel_pk: p.parcel_pk }),
+      });
+      if (res.status === 401) setSaveState('signin');
+      else if (res.ok) setSaveState('saved');
+      else setSaveState('error');
+    } catch {
+      setSaveState('error');
+    }
+  }
+  const saveLabel =
+    saveState === 'saved'
+      ? 'SAVED ✓'
+      : saveState === 'saving'
+        ? 'SAVING…'
+        : saveState === 'signin'
+          ? 'SIGN IN TO SAVE'
+          : saveState === 'error'
+            ? 'TRY AGAIN →'
+            : 'SAVE THIS LEAD →';
+
+  const neighborhood = p.neighborhood_name ?? '—';
+  const atlasHref = atlasUrl(p.address);
 
   return (
     <RailProvider>
       <span className="sr-only">
-        Property deep-dive for {p.address} in Fishtown, Philadelphia: assessment,
-        sale history, permits, comparable sales, value estimate, and a
+        Property deep-dive for {p.address} in {neighborhood}, Philadelphia:
+        assessment, sale history, permits, comparable sales, value estimate, and a
         decomposable distress score.
       </span>
 
@@ -140,7 +326,8 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
         <Wordmark variant="boxed" />
         <div className="pb-header-id">
           <p className="pb-eyebrow">
-            PARCEL DEEP-DIVE · FISHTOWN / {p.zip ?? ''}
+            PARCEL DEEP-DIVE · {(p.neighborhood_name ?? '').toUpperCase()} /{' '}
+            {p.zip ?? ''}
           </p>
           <h1 className="pb-address">{p.address}</h1>
           <p className="pb-subaddr">{subaddr}</p>
@@ -164,10 +351,11 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                 value={usd(a.market_value.value)}
                 sub={
                   <>
-                    <SourceStamp code="opa" dotted>
+                    <SourceStamp code="opa" href={a.market_value.source_url || undefined} dotted>
                       OPA
-                    </SourceStamp>{' '}
-                    · land $58k · bldg $183k
+                    </SourceStamp>
+                    {p.category_code ? ` · CLASS ${p.category_code}` : ''}
+                    {p.zoning ? ` · ${p.zoning}` : ''}
                   </>
                 }
               />
@@ -177,8 +365,8 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                 value={usd(a.last_sale.value)}
                 sub={
                   <>
-                    <SourceStamp code="rtt" dotted>
-                      RECORDS DEPT
+                    <SourceStamp code="opa" href={a.last_sale.source_url || undefined} dotted>
+                      OPA
                     </SourceStamp>{' '}
                     · {mmYYYY(p.sale_date)}
                   </>
@@ -190,54 +378,72 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                 label="Assessed $ / SF"
                 value={usd(a.assessed_psf.value)}
                 sub={
-                  <>
-                    <SourceStamp code="opa" dotted>
+                  p.livable_area != null ? (
+                    <>
+                      <SourceStamp code="opa" href={a.assessed_psf.source_url || undefined} dotted>
+                        OPA
+                      </SourceStamp>{' '}
+                      · {p.livable_area.toLocaleString('en-US')} SF livable
+                    </>
+                  ) : (
+                    <SourceStamp code="opa" href={a.assessed_psf.source_url || undefined} dotted>
                       OPA
-                    </SourceStamp>{' '}
-                    · {p.livable_area?.toLocaleString('en-US')} SF livable
-                  </>
+                    </SourceStamp>
+                  )
                 }
               />
               <MetricCell
                 label="Change since last sale"
                 value={pct(a.change_since_sale_pct)}
-                sub="over 12 yrs · ~5.4% / yr"
+                sub={changeSub}
               />
             </MetricStrip>
             <div className="pb-actions" style={{ marginTop: 'var(--pb-space-5)', gap: 'var(--pb-space-5)' }}>
-              <SourceStamp code="opa">{a.market_value.source_stamp}</SourceStamp>
-              <SourceStamp code="rtt">[RECORDS DEPT · RTT]</SourceStamp>
+              <SourceStamp code="opa" href={a.market_value.source_url || undefined}>
+                {a.market_value.source_stamp}
+              </SourceStamp>
             </div>
             <p className="pb-freshness">
-              Where this comes from · OPA certified value, refreshed 6 days ago.
+              Where this comes from · OPA certified roll, refreshed nightly.
             </p>
           </Card>
 
           {/* Sale history */}
-          <Card title="Sale history" tally="3 RECORDED TRANSFERS" headingId="saleHead" aria-labelledby="saleHead">
+          <Card
+            title="Sale history"
+            tally={`${data.transfers.length} RECORDED TRANSFER${data.transfers.length === 1 ? '' : 'S'}`}
+            headingId="saleHead"
+            aria-labelledby="saleHead"
+          >
             <Ledger>
               <LedgerHead columns={['Date', 'Price', 'Type', 'Source']} />
               <LedgerBody>
-                {data.transfers.map((t) => (
-                  <tr key={t.transfer_id}>
-                    <NumCell>{mmYYYY(t.recording_date)}</NumCell>
-                    <NumCell>
-                      <SourceStamp code={t.is_sheriff ? 'sheriff' : 'rtt'} dotted>
-                        {usd(t.total_consideration)}
-                      </SourceStamp>
-                    </NumCell>
-                    <LabelCell>{transferPill(t)}</LabelCell>
-                    <NumCell>
-                      <SourceStamp code={t.is_sheriff ? 'sheriff' : 'rtt'}>
-                        {t.source_stamp}
-                      </SourceStamp>
-                    </NumCell>
+                {data.transfers.length === 0 ? (
+                  <tr>
+                    <LabelCell>No recorded deeds in the index for this parcel.</LabelCell>
                   </tr>
-                ))}
+                ) : (
+                  data.transfers.map((t) => (
+                    <tr key={t.transfer_id}>
+                      <NumCell>{mmYYYY(t.recording_date)}</NumCell>
+                      <NumCell>
+                        <SourceStamp code={t.is_sheriff ? 'sheriff' : 'rtt'} href={atlasHref} dotted>
+                          {usd(t.total_consideration)}
+                        </SourceStamp>
+                      </NumCell>
+                      <LabelCell>{transferPill(t)}</LabelCell>
+                      <NumCell>
+                        <SourceStamp code={t.is_sheriff ? 'sheriff' : 'rtt'} href={atlasHref}>
+                          {t.source_stamp}
+                        </SourceStamp>
+                      </NumCell>
+                    </tr>
+                  ))
+                )}
               </LedgerBody>
             </Ledger>
             <p className="pb-freshness">
-              Where this comes from · Records Dept deed index, refreshed 11 days ago.
+              Where this comes from · Records Dept deed index, refreshed nightly.
             </p>
           </Card>
 
@@ -252,44 +458,59 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                       <Pill kind="blue">{openPermit?.type_code ?? 'NONE'}</Pill>
                     </NumCell>
                     <NumCell>
-                      <SourceStamp code="li">[L&amp;I &apos;25]</SourceStamp>
+                      {openPermit ? (
+                        <SourceStamp code="li" href={atlasHref}>
+                          {openPermit.source_stamp}
+                        </SourceStamp>
+                      ) : (
+                        <SourceStamp code="li" href={atlasHref}>
+                          [L&amp;I]
+                        </SourceStamp>
+                      )}
                     </NumCell>
                   </tr>
                   <tr>
                     <LabelCell>Open violation</LabelCell>
                     <NumCell>
-                      <Pill kind="danger">{openViolation?.type_code ?? 'NONE'} · 1</Pill>
+                      {openViolationCount > 0 ? (
+                        <Pill kind="danger">
+                          {openViolation?.type_code ?? 'OPEN'} · {openViolationCount}
+                        </Pill>
+                      ) : (
+                        <Pill kind="neutral">NONE</Pill>
+                      )}
                     </NumCell>
                     <NumCell>
-                      <SourceStamp code="li">[L&amp;I &apos;24]</SourceStamp>
+                      {openViolation ? (
+                        <SourceStamp code="li" href={atlasHref}>
+                          {openViolation.source_stamp}
+                        </SourceStamp>
+                      ) : (
+                        <SourceStamp code="li" href={atlasHref}>
+                          [L&amp;I]
+                        </SourceStamp>
+                      )}
                     </NumCell>
                   </tr>
                   <tr>
                     <LabelCell>Closed violations</LabelCell>
                     <NumCell>{closedViolations}</NumCell>
                     <NumCell>
-                      <SourceStamp code="li">[L&amp;I]</SourceStamp>
+                      <SourceStamp code="li" href={atlasHref}>
+                        [L&amp;I]
+                      </SourceStamp>
                     </NumCell>
                   </tr>
                 </LedgerBody>
               </Ledger>
-              <p className="pb-freshness">Refreshed 3 days ago.</p>
+              <p className="pb-freshness">
+                Where this comes from · L&amp;I permit &amp; violation index, refreshed nightly.
+              </p>
             </Card>
 
             <Card title="Taxes" tally="REVENUE DEPT" headingId="taxHead" aria-labelledby="taxHead">
               <Ledger>
                 <LedgerBody>
-                  <tr>
-                    <LabelCell>2026 RE tax billed</LabelCell>
-                    <NumCell>
-                      <SourceStamp code="rev" dotted>
-                        {usd(data.tax.billed.value)}
-                      </SourceStamp>
-                    </NumCell>
-                    <NumCell>
-                      <SourceStamp code="rev">[REV]</SourceStamp>
-                    </NumCell>
-                  </tr>
                   <tr>
                     <LabelCell>Status</LabelCell>
                     <NumCell>
@@ -298,38 +519,46 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                       </Pill>
                     </NumCell>
                     <NumCell>
-                      <SourceStamp code="rev">[REV]</SourceStamp>
+                      <SourceStamp code="rev" href={data.tax.balance_with_penalty.source_url || undefined}>
+                        [REV]
+                      </SourceStamp>
                     </NumCell>
                   </tr>
                   <tr>
                     <LabelCell>Balance + penalty</LabelCell>
                     <NumCell>
-                      <SourceStamp code="rev" dotted>
+                      <SourceStamp
+                        code="rev"
+                        href={data.tax.balance_with_penalty.source_url || undefined}
+                        dotted
+                      >
                         {usd(data.tax.balance_with_penalty.value)}
                       </SourceStamp>
                     </NumCell>
                     <NumCell>
-                      <SourceStamp code="rev">[REV]</SourceStamp>
+                      <SourceStamp code="rev" href={data.tax.balance_with_penalty.source_url || undefined}>
+                        [REV]
+                      </SourceStamp>
                     </NumCell>
                   </tr>
                 </LedgerBody>
               </Ledger>
-              <p className="pb-freshness">Two years behind. Refreshed 3 days ago.</p>
+              <p className="pb-freshness">{taxFreshness}</p>
             </Card>
           </section>
 
           {/* Comps + value derivation */}
           <Card
             frame
-            title="Comps · arms-length, ≤ 0.3 mi"
-            tally={`N = ${data.comps.distribution.n_trimmed} · 12 MO`}
+            title={`Comps · arms-length, ≤ ${maxDist.toFixed(2)} mi`}
+            tally={`N = ${totalTrimmed}${compMonths != null ? ` · ≤ ${compMonths} MO` : ''}`}
             headingId="compHead"
             aria-labelledby="compHead"
           >
             {shownComps.map((c) => {
               const flag = c.reason.is_median ? 'MEDIAN' : 'WHY';
               const widthPct = c.price_per_sqft
-                ? Math.round((c.price_per_sqft / 256) * 100)
+                ? Math.max(4, Math.round((c.price_per_sqft / compBarMax) * 100))
                 : 80;
               const fillClass = c.reason.is_median
                 ? 'pb-bar-fill--brick'
@@ -350,7 +579,9 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                   <p className="pb-why">
                     <span className="pb-whyflag">{flag}</span>
                     {c.reason.note}{' '}
-                    <SourceStamp code="rtt">{c.source_stamp}</SourceStamp>
+                    <SourceStamp code="rtt" href={c.source_url || undefined}>
+                      {c.source_stamp}
+                    </SourceStamp>
                   </p>
                 </div>
               );
@@ -366,7 +597,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
             <ValueDerivationDrawer comps={data.comps} livableArea={p.livable_area} />
 
             <p className="pb-freshness">
-              Where this comes from · comp set rebuilt nightly, refreshed 1 day ago.
+              Where this comes from · arms-length deeds (RTT), comp set rebuilt nightly.
             </p>
           </Card>
 
@@ -383,26 +614,14 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
               <p className="pb-mval">{data.distress.score100}</p>
             </div>
 
-            <DistressBar
-              result={data.distress}
-              intro={
-                <>
-                  Three things weigh on this parcel: it&apos;s behind on taxes, it
-                  carries an open unsafe violation, and it&apos;s read as vacant.
-                  Tap a segment to see the receipt.
-                </>
-              }
-            />
+            <DistressBar result={data.distress} intro={distressIntro} />
 
-            <CommunitySignal>
-              Vacant three-plus years and two years behind on taxes — but the
-              bones are good and the block&apos;s already turning. Bring this one
-              back and that&apos;s a home returned to Firth Street, not another
-              shell. 142 vacant on these blocks · 38 in active rehab this year.
-            </CommunitySignal>
+            <CommunitySignal>{communityCopy}</CommunitySignal>
 
             <div className="pb-actions">
-              <Button variant="primary">SAVE THIS LEAD →</Button>
+              <Button variant="primary" onClick={saveLead}>
+                {saveLabel}
+              </Button>
               <Button variant="secondary">ADD NOTE +</Button>
               <Button variant="ghost">EXPORT RECORD</Button>
             </div>

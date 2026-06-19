@@ -1,0 +1,221 @@
+/**
+ * Leads surface layout (PRD §7.3). Reuses the scan shell grid (pb-shell-scan)
+ * for the filter-rail + main split; adds only new pb-leads-* rules for the list
+ * header, the table, the inline distress bar, and the load-more footer. Tokens
+ * only — no new colors. The right rail is intentionally absent here (two columns),
+ * so the main column spans the remaining track.
+ */
+
+/* The leads shell drops the scan's right rail → filter rail + list only. */
+.pb-leads-shell {
+  grid-template-columns: 248px 1fr;
+}
+
+.pb-leads-col {
+  min-width: 0;
+}
+
+/* Header right cluster: live total + the one primary (Export) CTA. */
+.pb-leads-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-4);
+}
+.pb-leads-total {
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-sm);
+  font-weight: 700;
+  letter-spacing: var(--pb-track-label);
+  text-transform: uppercase;
+  color: var(--pb-slate);
+}
+.pb-leads-exportmsg {
+  margin: 0 var(--pb-space-7);
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-sm);
+  font-weight: 700;
+  color: var(--pb-red);
+}
+
+.pb-leads-tablewrap {
+  padding: 0 var(--pb-space-7) var(--pb-space-5);
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pb-leads-tablewrap[aria-busy='true'] {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+/* ── The list table ───────────────────────────────────────────────────────── */
+.pb-leads-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--pb-font-ui);
+  font-size: var(--pb-text-sm);
+}
+.pb-leads-table th {
+  text-align: left;
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-xs);
+  font-weight: 700;
+  letter-spacing: var(--pb-track-label);
+  text-transform: uppercase;
+  color: var(--pb-slate);
+  padding: var(--pb-space-3) var(--pb-space-3);
+  border-bottom: var(--pb-border-w) solid var(--pb-ink);
+  white-space: nowrap;
+}
+.pb-leads-table td {
+  padding: var(--pb-space-3) var(--pb-space-3);
+  border-bottom: var(--pb-border-w-in) solid var(--pb-slate);
+  vertical-align: middle;
+}
+.pb-leads-rank {
+  width: 2.5rem;
+  font-family: var(--pb-font-mono);
+  font-weight: 700;
+  color: var(--pb-slate);
+}
+.pb-leads-addr {
+  font-weight: 700;
+  color: var(--pb-blue);
+}
+
+/* Score cell: the 0–100 number + a small inline bar (encoding is structural,
+   not red — the bar fill is blue so it doesn't spend the red budget). */
+.pb-leads-score {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-3);
+}
+.pb-leads-scoreval {
+  font-family: var(--pb-font-mono);
+  font-weight: 700;
+  min-width: 2ch;
+}
+.pb-leads-bar {
+  display: inline-block;
+  width: 84px;
+  height: 8px;
+  background: var(--pb-paper-warm);
+  border: var(--pb-border-w-in) solid var(--pb-ink);
+}
+.pb-leads-barfill {
+  display: block;
+  height: 100%;
+  background: var(--pb-blue);
+}
+
+.pb-leads-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pb-space-2);
+}
+.pb-leads-none {
+  color: var(--pb-slate);
+}
+
+.pb-leads-owner {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-2);
+}
+
+.pb-leads-actcol {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.pb-leads-save {
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-xs);
+  font-weight: 700;
+  letter-spacing: var(--pb-track-label);
+  text-transform: uppercase;
+  color: var(--pb-ink);
+  background: var(--pb-surface);
+  border: var(--pb-border-w-in) solid var(--pb-ink);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.pb-leads-save:hover {
+  background: var(--pb-ink);
+  color: var(--pb-paper);
+}
+
+/* Row actions: Save + BYO skip-trace, stacked tight and right-aligned. */
+.pb-leads-rowactions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.pb-leads-skip {
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-xs);
+  font-weight: 700;
+  letter-spacing: var(--pb-track-label);
+  text-transform: uppercase;
+  color: var(--pb-ink-soft, var(--pb-ink));
+  background: transparent;
+  border: var(--pb-border-w-in) dotted var(--pb-ink);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.pb-leads-skip:hover:not(:disabled) {
+  border-style: solid;
+}
+.pb-leads-skip:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.pb-skip-result {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-family: var(--pb-font-mono);
+  font-size: var(--pb-text-xs);
+  text-align: right;
+}
+.pb-skip-name {
+  font-weight: 700;
+  color: var(--pb-ink);
+}
+.pb-skip-line {
+  color: var(--pb-ink-soft, var(--pb-ink));
+}
+
+.pb-leads-empty {
+  padding: var(--pb-space-7);
+  font-family: var(--pb-font-serif);
+  font-style: italic;
+  color: var(--pb-slate);
+}
+
+.pb-leads-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--pb-space-5) var(--pb-space-7) var(--pb-space-7);
+}
+
+/* Visually-hidden label for the actions column header. */
+.pb-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .pb-leads-shell {
+    grid-template-columns: 1fr;
+  }
+}

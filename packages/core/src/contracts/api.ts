@@ -35,6 +35,8 @@ export interface ParcelCore {
   mailing_address: string | null;
   is_out_of_state_owner: boolean;
   neighborhood_id: string | null;
+  /** Resolved human name for neighborhood_id (geo_boundary), e.g. "Logan". */
+  neighborhood_name: string | null;
   zip_id: string | null;
   tract_id: string | null;
 }
@@ -183,4 +185,64 @@ export interface LeadsResponse {
   page: number;
   page_size: number;
   total: number;
+}
+
+/**
+ * GET /api/leads?facets=1 — honest per-signal counts for the filter rail, scoped
+ * to the active min_score + neighborhood (so a toggle shows how many leads it
+ * would surface). `by_signal` keys are DistressComponentKey signal flags.
+ */
+export interface LeadFacets {
+  total: number;
+  by_signal: Record<string, number>;
+}
+
+// ── M6: mini-CRM (PRD §3.5, §7.3) — saved leads ──────────────────────────────
+
+/** Canonical lead pipeline statuses for the mini-CRM. */
+export type SavedLeadStatus = 'new' | 'contacted' | 'negotiating' | 'dead' | 'won';
+
+/** One app.saved_lead row, owned by the authenticated user. */
+export interface SavedLead {
+  id: string;
+  parcel_pk: string;
+  status: SavedLeadStatus;
+  tags: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** POST /api/leads/save body — upsert one saved lead for the current user. */
+export interface SaveLeadInput {
+  parcel_pk: string;
+  status?: SavedLeadStatus;
+  tags?: string[];
+  notes?: string | null;
+}
+
+// ── M6: BYO skip-trace (PRD §6, §7.5, §8) ────────────────────────────────────
+
+/**
+ * Skip-trace vendor enum — the ONLY thing that selects a base URL, via a
+ * server-side allowlist. A vendor host is NEVER read from the DB or user input
+ * (PRD §6 threat model). First targets: BatchData / REISkip / Endato (§11).
+ */
+export type SkipTraceVendor = 'batchdata' | 'reiskip' | 'endato';
+
+/** Contact data returned to the session only — NEVER persisted server-side. */
+export interface SkipTraceContact {
+  name: string | null;
+  phones: string[];
+  emails: string[];
+  mailing_address: string | null;
+}
+
+/** POST /api/skiptrace/:pk response (transient; not stored, key never logged). */
+export interface SkipTraceResult {
+  parcel_pk: string;
+  vendor: SkipTraceVendor;
+  contact: SkipTraceContact;
+  /** ISO timestamp of the lookup. */
+  looked_up_at: string;
 }

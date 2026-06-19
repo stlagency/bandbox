@@ -34,6 +34,7 @@ export const firthStDeepDive: ParcelDeepDive = {
     mailing_address: '88 SEA GRAPE LN, NAPLES FL',
     is_out_of_state_owner: true,
     neighborhood_id: 'fishtown',
+    neighborhood_name: 'Fishtown',
     zip_id: '19125',
     tract_id: '42101015800',
   },
@@ -56,7 +57,8 @@ export const firthStDeepDive: ParcelDeepDive = {
       source_url: ATLAS('312015400'),
       refreshed_at: '2026-06-12',
     },
-    change_since_sale_pct: 0.87,
+    // PERCENT units (matches lib/parcel-query producer): (241400-129000)/129000.
+    change_since_sale_pct: 87.1,
   },
   transfers: [
     {
