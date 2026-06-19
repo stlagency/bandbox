@@ -14,11 +14,11 @@
  * rail; its "Save this neighborhood →" primary CTA is the second sanctioned red.
  */
 import { useState } from 'react';
-import type { LensMetric } from '@phillybricks/core/contracts';
+import type { LensMetric, ScanFeature } from '@phillybricks/core/contracts';
 import { TopBand } from '../components/TopBand';
 import { FilterRail } from '../components/FilterRail';
 import { LensSwitcher } from '../components/LensSwitcher';
-import { BlueprintMap } from '../components/BlueprintMap';
+import { ScanMap } from '../components/ScanMap';
 import { MapLegend } from '../components/MapLegend';
 import { TimeStrip } from '../components/TimeStrip';
 import { DistressBlock } from '../components/DistressBlock';
@@ -31,6 +31,7 @@ import { pointBreezeDetail } from '../lib/mock/neighborhood';
 
 export function MarketScan() {
   const [lens, setLens] = useState<LensMetric>('distress');
+  const [selected, setSelected] = useState<ScanFeature | null>(null);
   const d = pointBreezeDetail;
 
   return (
@@ -57,7 +58,12 @@ export function MarketScan() {
           </div>
 
           <div className="pb-map-outer">
-            <BlueprintMap lens={lens} />
+            <ScanMap lens={lens} onSelect={setSelected} />
+            {selected ? (
+              <p className="pb-freshline" style={{ margin: 'var(--pb-space-3) 0 0' }}>
+                {selected.name} · {lens} {selected.value === null ? '—' : Number(selected.value).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              </p>
+            ) : null}
           </div>
 
           <div className="pb-timestrip-wrap">

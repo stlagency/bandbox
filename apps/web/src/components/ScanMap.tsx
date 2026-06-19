@@ -1,0 +1,223 @@
+'use client';
+
+/**
+ * ScanMap — the real MapLibre choropleth (PRD §7.1). Replaces the stylized
+ * blueprint SVG (kept in BlueprintMap.tsx as the design reference / backlog) with
+ * a live map of Philadelphia's neighborhood boundaries, colored from the active
+ * lens's geo_metric values.
+ *
+ * Data: /api/boundaries (GeoJSON geometry) joined to /api/scan (per-lens value +
+ * quantile bucket) on geo_id. Fill is the lens's 5-stop ramp (theme-aware,
+ * matching the blueprint design's LENS_RAMPS); the draft-navy ground + survey-blue
+ * borders keep the instrument feel without an external tile provider (the high-zoom
+ * per-parcel layer is the PMTiles object on R2 — packages/tiles — added with deploy).
+ *
+ * Recolors on lens + theme change; click a neighborhood → onSelect(feature).
+ */
+import { useEffect, useRef, useState } from 'react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import type { FeatureCollection } from 'geojson';
+import type { LensMetric, ScanFeature } from '@phillybricks/core/contracts';
+import { LENS_RAMPS } from '../lib/mock/scan';
+
+const DRAFT_BG = '#1C2530';
+const DRAFT_LINE = '#7FB0E0';
+const PHILLY_BOUNDS: [number, number, number, number] = [-75.2803, 39.8670, -74.9558, 40.1379];
+
+/** A blank MapLibre style — no external tiles, just the draft-navy ground. */
+const blankStyle: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [{ id: 'bg', type: 'background', paint: { 'background-color': DRAFT_BG } }],
+};
+
+function useTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  useEffect(() => {
+    const read = () =>
+      setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+  return theme;
+}
+
+/** MapLibre fill-color expression: match the joined `bucket` (0..4) to the lens ramp. */
+function fillColorExpr(ramp: string[]): maplibregl.ExpressionSpecification {
+  return [
+    'match',
+    ['get', 'bucket'],
+    0, ramp[0]!,
+    1, ramp[1]!,
+    2, ramp[2]!,
+    3, ramp[3]!,
+    4, ramp[4]!,
+    ramp[0]!,
+  ];
+}
+
+export interface ScanMapProps {
+  lens: LensMetric;
+  geoType?: 'neighborhood' | 'zip' | 'tract';
+  onSelect?: (f: ScanFeature | null) => void;
+}
+
+export function ScanMap({ lens, geoType = 'neighborhood', onSelect }: ScanMapProps) {
+  const theme = useTheme();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const boundaryRef = useRef<FeatureCollection | null>(null);
+  const [ready, setReady] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  // Initialize the map once.
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: blankStyle,
+      bounds: PHILLY_BOUNDS,
+      fitBoundsOptions: { padding: 24 },
+      attributionControl: false,
+      dragRotate: false,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+    map.on('load', () => {
+      mapRef.current = map;
+      map.resize(); // container may have sized after init
+      setReady(true);
+    });
+    // Keep the GL canvas matched to the (aspect-ratio) container as it lays out.
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(containerRef.current);
+    return () => {
+      ro.disconnect();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Load boundary geometry whenever the geo type changes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fc = (await (await fetch(`/api/boundaries?geo=${geoType}`)).json()) as FeatureCollection;
+        if (cancelled) return;
+        boundaryRef.current = fc;
+        // re-trigger the join effect by bumping ready (geometry changed).
+        if (mapRef.current) applyData(mapRef.current);
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoType, ready]);
+
+  // Fetch the lens values + (re)apply the join + paint on lens/theme change.
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    applyData(mapRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lens, theme, ready, geoType]);
+
+  /** Join /api/scan buckets into the boundary GeoJSON and (re)paint. */
+  async function applyData(map: maplibregl.Map) {
+    const fc = boundaryRef.current;
+    if (!fc) return;
+    let scanByGeo = new Map<string, ScanFeature>();
+    try {
+      const scan = await (await fetch(`/api/scan?geo=${geoType}&lens=${lens}`)).json();
+      scanByGeo = new Map((scan.features as ScanFeature[]).map((f) => [f.geo_id, f]));
+    } catch {
+      setStatus('error');
+      return;
+    }
+    const joined: FeatureCollection = {
+      type: 'FeatureCollection',
+      features: fc.features.map((feat) => {
+        const id = (feat.properties as { geo_id: string }).geo_id;
+        const s = scanByGeo.get(id);
+        return {
+          ...feat,
+          properties: {
+            ...feat.properties,
+            bucket: s?.bucket ?? 0,
+            value: s?.value ?? null,
+            name: s?.name ?? (feat.properties as { name?: string }).name ?? id,
+          },
+        };
+      }),
+    };
+
+    const ramp = LENS_RAMPS[lens][theme];
+    const src = map.getSource('hoods') as maplibregl.GeoJSONSource | undefined;
+    if (src) {
+      src.setData(joined);
+      map.setPaintProperty('hoods-fill', 'fill-color', fillColorExpr(ramp));
+    } else {
+      map.addSource('hoods', { type: 'geojson', data: joined, promoteId: 'geo_id' });
+      map.addLayer({
+        id: 'hoods-fill',
+        type: 'fill',
+        source: 'hoods',
+        paint: {
+          'fill-color': fillColorExpr(ramp),
+          'fill-opacity': [
+            'case',
+            ['boolean', ['feature-state', 'hover'], false],
+            0.88,
+            0.74,
+          ],
+        },
+      });
+      map.addLayer({
+        id: 'hoods-line',
+        type: 'line',
+        source: 'hoods',
+        paint: { 'line-color': DRAFT_LINE, 'line-width': 0.6, 'line-opacity': 0.7 },
+      });
+      wireInteractions(map);
+    }
+    setStatus('ready');
+  }
+
+  /** Hover feature-state + click → onSelect. */
+  function wireInteractions(map: maplibregl.Map) {
+    let hovered: string | number | undefined;
+    map.on('mousemove', 'hoods-fill', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features?.[0];
+      if (!f) return;
+      if (hovered !== undefined) map.setFeatureState({ source: 'hoods', id: hovered }, { hover: false });
+      hovered = f.id as string | number;
+      map.setFeatureState({ source: 'hoods', id: hovered }, { hover: true });
+    });
+    map.on('mouseleave', 'hoods-fill', () => {
+      map.getCanvas().style.cursor = '';
+      if (hovered !== undefined) map.setFeatureState({ source: 'hoods', id: hovered }, { hover: false });
+      hovered = undefined;
+    });
+    map.on('click', 'hoods-fill', (e) => {
+      const p = e.features?.[0]?.properties as { geo_id: string; name: string; value: number | null; bucket: number } | undefined;
+      if (p && onSelect) onSelect({ geo_id: p.geo_id, geo_type: geoType, name: p.name, value: p.value, bucket: p.bucket });
+    });
+  }
+
+  return (
+    <div className="pb-mapframe" style={{ width: '100%', display: 'block', aspectRatio: '760 / 560' }}>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} aria-label={`Philadelphia ${geoType} map — ${lens} lens`} role="img" />
+      {status === 'error' ? (
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: DRAFT_LINE, fontFamily: 'var(--pb-font-mono)', fontSize: 12 }}>
+          map data unavailable
+        </div>
+      ) : null}
+    </div>
+  );
+}
