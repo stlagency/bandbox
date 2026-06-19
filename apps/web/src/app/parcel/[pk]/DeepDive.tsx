@@ -13,7 +13,7 @@
  * Budget spent — every other action is ink/ghost, danger pills downshift only
  * where they are true signals (delinquent / unsafe), other metrics use sky-tint.
  */
-import type { ParcelDeepDive } from '@phillybricks/core/contracts';
+import type { Comp, ParcelDeepDive } from '@phillybricks/core/contracts';
 import { Wordmark } from '../../../components/Wordmark';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 import { Card } from '../../../components/Card';
@@ -81,6 +81,34 @@ function transferPill(t: ParcelDeepDive['transfers'][number]) {
   return <Pill kind="neutral">{t.document_type}</Pill>;
 }
 
+/**
+ * How many comps the deep-dive paints. `CompsResult.comps` is the full p5/p95-
+ * trimmed pool — every sale feeding `distribution` and the estimate — which runs
+ * to 200+ in a dense neighborhood (the widening ladder floors the sample at N≥5
+ * but never caps it). This is a DISPLAY cap only; the estimate is unchanged.
+ */
+const COMP_DISPLAY_CAP = 8;
+
+/**
+ * Curate the comps the page renders out of the full trimmed pool. Always keep
+ * the median (it sets the number) and the near-trim-boundary context comps, fill
+ * the rest with the nearest, dedupe repeat-sale parcels, then cap and show
+ * nearest-first. Selection/trim/estimate math (in core) is untouched.
+ */
+function curateComps(comps: Comp[], cap: number): Comp[] {
+  const pinned = comps.filter((c) => c.reason.is_median || c.reason.near_trim_boundary);
+  const rest = comps.filter((c) => !c.reason.is_median && !c.reason.near_trim_boundary);
+  const seen = new Set<string>();
+  const out: Comp[] = [];
+  for (const c of [...pinned, ...rest]) {
+    if (seen.has(c.parcel_pk)) continue;
+    seen.add(c.parcel_pk);
+    out.push(c);
+    if (out.length >= cap) break;
+  }
+  return out.sort((a, b) => a.reason.distance_mi - b.reason.distance_mi);
+}
+
 export function DeepDive({ data }: { data: ParcelDeepDive }) {
   const p = data.parcel;
   const a = data.assessment_vs_sale;
@@ -90,6 +118,9 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
     ` · ${p.category_code === '1' ? 'ROW' : (p.category_code ?? '—')}` +
     (p.beds != null ? ` · ${p.beds}BR/1BA` : '') +
     (p.livable_area != null ? ` · ${p.livable_area.toLocaleString('en-US')} SF` : '');
+
+  const shownComps = curateComps(data.comps.comps, COMP_DISPLAY_CAP);
+  const totalTrimmed = data.comps.distribution.n_trimmed;
 
   const openPermit = data.li.find((l) => l.kind === 'permit' && l.status === 'open');
   const openViolation = data.li.find((l) => l.kind === 'violation' && l.status === 'open');
@@ -295,7 +326,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
             headingId="compHead"
             aria-labelledby="compHead"
           >
-            {data.comps.comps.map((c, i) => {
+            {shownComps.map((c) => {
               const flag = c.reason.is_median ? 'MEDIAN' : 'WHY';
               const widthPct = c.price_per_sqft
                 ? Math.round((c.price_per_sqft / 256) * 100)
@@ -306,7 +337,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                   ? 'pb-bar-fill--blue'
                   : 'pb-bar-fill--sky';
               return (
-                <div className="pb-comp" key={`${c.parcel_pk}-${i}`}>
+                <div className="pb-comp" key={c.parcel_pk}>
                   <div className="pb-comp-top">
                     <span className="pb-comp-addr">{c.address}</span>
                     <span className="pb-comp-psf">
@@ -324,6 +355,13 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
                 </div>
               );
             })}
+
+            {totalTrimmed > shownComps.length && (
+              <p className="pb-freshness">
+                Showing the {shownComps.length} most relevant of {totalTrimmed}{' '}
+                arms-length comps — the estimate below uses all {totalTrimmed}.
+              </p>
+            )}
 
             <ValueDerivationDrawer comps={data.comps} livableArea={p.livable_area} />
 
