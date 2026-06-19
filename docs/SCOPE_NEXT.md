@@ -19,7 +19,32 @@ then `pnpm run verify`, deploy, verify live.
 
 ---
 
-## Decisions — resolved defaults vs. Aaron's call
+## 0 · Pre-flight (do BEFORE any rename) — ⚠ migrate the memory + secrets
+
+**Aaron is renaming this working folder before the next session.** The auto-memory
+directory is keyed off the absolute cwd (`/` and `_` → `-`), so renaming the folder
+points the new session at an **empty** memory dir and **orphans the project memory AND
+the secret files** (`memory/database-url.secret`, `memory/supabase-access-token.secret`)
+that the DB/deploy/Supabase-Management steps depend on.
+
+**First thing the new session must do** (it can read its own new cwd; the OLD path is fixed):
+```bash
+OLD=~/.claude/projects/-Users-aaroncohen-CLAUDEMAXING-cw-Philly
+NEW=~/.claude/projects/$(pwd | tr '/_' '--')          # encoding: / and _ → -
+cp -Rn "$OLD/memory" "$NEW/"                            # carries MEMORY.md, philly-*.md, AND the .secret files
+ls "$NEW/memory"                                        # verify: MEMORY.md + *.secret present
+```
+Then confirm `MEMORY.md` lists the `philly-*` entries and the two `.secret` files are
+present (chmod 600). Without them: no `DATABASE_URL`, no Supabase Management token → the
+DNS/deploy/migration steps can't run.
+
+**Infra steps the new session AUTOMATES** (all confirmed by Aaron): `gh repo rename`,
+Vercel project rename + `www.bandbox.pro` custom domain, and the Cloudflare DNS records
+(see §2d). The only thing Aaron does by hand is the ZeptoMail account/domain/token (M7-time).
+
+---
+
+## Decisions — CONFIRMED + the keep-as-is recommendations
 
 **Resolved (recommended; the plan below assumes these):**
 - Rename the **npm package scope** `@phillybricks/*` → `@bandbox/*` across all 5 packages (clean brand match; ~161 imports — mechanical, one regex pass).
@@ -29,10 +54,14 @@ then `pnpm run verify`, deploy, verify live.
 - CSV export + skip-trace stay **login-gated but free** (preserve the future paywall seam + discourage abuse); skip-trace keeps its lawful-use **attestation**.
 - ZeptoMail via **raw HTTPS** (`POST https://api.zeptomail.com/v1.1/email`, header `Authorization: Zoho-enczapikey <token>`) — no SDK dep.
 
-**Aaron's call (flagged ⚠ in steps — confirm before/at execution):**
-- **Domain/DNS** — register `bandbox.pro`, point DNS at Vercel, add `www.bandbox.pro` as the custom domain (keep `phillybricks.vercel.app` as a redirect). *Human action.*
-- **GitHub repo rename** `stlagency/phillybricks` → `stlagency/bandbox`? Recommended for brand clarity (GitHub auto-redirects old links); if kept, just note the historic name. *Human action if done.*
-- **Vercel project rename** `phillybricks` → `bandbox` (cosmetic; doesn't touch env/connection strings). *Human action.*
+**CONFIRMED by Aaron (2026-06-19):**
+- ✅ Keep internal names · ✅ keep the login gate (export/skip-trace free-but-authenticated) · ✅ monetization deferred to M8.
+- ✅ **Package scope `@phillybricks/*` → `@bandbox/*` proceeds** (not vetoed — do it in one regex pass).
+- ✅ **GitHub repo rename → `stlagency/bandbox`** — the new session runs `gh repo rename bandbox` and updates the doc links (GitHub redirects the old URL). Also update the local `git remote set-url origin`.
+- ✅ **Vercel project rename → `bandbox`** — via the Vercel API/CLI; add `www.bandbox.pro` as the custom domain.
+- **Domain:** `bandbox.pro` is **registered**, DNS **managed by Cloudflare** → the new session wires DNS automatically (see §2d). No manual DNS from Aaron.
+- **Folder rename:** Aaron renames the working folder before the next session → triggers the §0 memory/secrets migration.
+- **ZeptoMail:** Aaron is creating the account now → `ZEPTOMAIL_TOKEN` + a verified `bandbox.pro` sender will be available for the M7 build.
 
 ---
 
@@ -84,7 +113,7 @@ Grep: `PhillyBricks` (any case) **279** in ~18 files · `@phillybricks/` **161**
 - `lib/skiptrace.ts` — `galaxy-ap-name: phillybricks` → `bandbox` (Endato request id; cosmetic until a live vendor key).
 - `.env.example` — header + `RESEND_FROM`/`ZEPTOMAIL_FROM` domain → `@bandbox.pro`; the dev env var → `BANDBOX_DEV_USER_ID`.
 
-**(d) Domain (⚠ human):** register `bandbox.pro`; in Vercel add `www.bandbox.pro` (+ apex redirect) to the project; redirect `phillybricks.vercel.app` → `www.bandbox.pro`. Update the 5 `phillybricks.vercel.app` doc refs → `https://www.bandbox.pro`. `NEXT_PUBLIC_*` env values are unaffected (Supabase URLs are project-ref based, not brand-based).
+**(d) Domain — `bandbox.pro` registered, Cloudflare DNS (automatable):** in Vercel add `www.bandbox.pro` (+ apex) to the project → Vercel returns the CNAME/A target → create that record in **Cloudflare DNS** (via a Cloudflare DNS/zones MCP if connected, else the Cloudflare API with a zone token; note: the Cloudflare MCP seen this session was storage/compute [D1/KV/R2/Workers] — confirm a **DNS/zones**-capable Cloudflare server/token is available, or have Aaron add one). Set the Cloudflare proxy to "DNS only" for the Vercel record. Then redirect `phillybricks.vercel.app` → `www.bandbox.pro`. Update the 5 `phillybricks.vercel.app` doc refs → `https://www.bandbox.pro`. `NEXT_PUBLIC_*` env values are unaffected (Supabase URLs are project-ref based, not brand-based).
 
 **(e) Docs:** batch `PhillyBricks`→`Bandbox` across `README.md`, `PRD.md`, `BRAND.md` (`PhillyBricks.net` → `Bandbox.pro`), `STATUS.md`, `SELF_HOST.md`, `CONCEPT_v2_shared_understanding.md`, `PRODUCT_OVERVIEW.md`, `HANDOFF.md`, `design/DESIGN.md`, `docs/NEXT_SESSION.md`, `.impeccable.md`, `NEW_SESSION_BUILD_PROMPT.md` — **but keep** the tagline + South-Philly-voice descriptions.
 
@@ -125,9 +154,12 @@ Grep: `Resend` **25 mentions / 9 files**, **zero code** (M7 email is unbuilt —
 
 ---
 
-## Net human pause-points (all of the above)
-1. **`bandbox.pro`** — register + DNS → Vercel; add `www.bandbox.pro` custom domain (+ redirect from `phillybricks.vercel.app`).
-2. **Vercel project rename** phillybricks → bandbox (optional, cosmetic).
-3. **GitHub repo rename** (optional) phillybricks → bandbox.
-4. **ZeptoMail (M7):** Zoho account + verify `bandbox.pro` sending domain + mint `ZEPTOMAIL_TOKEN` (GH Actions secret + Vercel env).
-5. **Stripe keys** — only when M8 monetization is taken off the shelf.
+## Pause-points — what's automated vs. genuinely human
+
+**The new session does these itself** (all confirmed): `gh repo rename bandbox` + `git remote set-url`; Vercel project rename + add `www.bandbox.pro`; Cloudflare DNS record for the Vercel target (§2d, if a DNS-capable Cloudflare MCP/token is present); the §0 memory/secrets migration; the whole rebrand+descope PR + deploy + live-verify.
+
+**Genuinely human (Aaron):**
+1. **Folder rename** — done before the next session (triggers §0 migration). ✅ planned.
+2. **`bandbox.pro`** — registered, Cloudflare DNS. ✅ done. (New session only needs a Cloudflare DNS token/MCP to write the record — confirm it's connected.)
+3. **ZeptoMail (M7-time):** Zoho/ZeptoMail account (being set up now) → verify the `bandbox.pro` sending domain (DKIM/SPF) → mint `ZEPTOMAIL_TOKEN` → store as a GH Actions secret + Vercel env.
+4. **Stripe keys** — only when M8 monetization is taken off the shelf.

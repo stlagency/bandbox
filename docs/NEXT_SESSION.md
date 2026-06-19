@@ -1,8 +1,13 @@
 # PhillyBricks — resume here (next session)
 
-> ## ⚠ DO THIS FIRST — pending rescope (decided 2026-06-19, not yet executed)
+> ## ⚠ DO THIS FIRST — pending rescope (decided + confirmed 2026-06-19, not yet executed)
 > Before M7, a fresh session must execute **three scoped changes**. The full plan +
 > exhaustive touchpoint inventory is in **[`docs/SCOPE_NEXT.md`](SCOPE_NEXT.md)** — follow it.
+> **Literal first step = `SCOPE_NEXT.md` §0:** the working folder was renamed, so migrate
+> `~/.claude/projects/-Users-aaroncohen-CLAUDEMAXING-cw-Philly/memory` → the new
+> path-encoded dir, or the project memory + the `.secret` files (DATABASE_URL, Supabase
+> Management token) won't load. All decisions are confirmed (keep internal names, keep the
+> login gate, defer monetization to M8, `@bandbox/*` scope, repo+Vercel rename, Cloudflare DNS).
 > 1. **Rename PhillyBricks → Bandbox**, domain → **www.bandbox.pro** (name + domain only;
 >    Philly voice/tagline/design UNCHANGED; wordmark BAND/BOX; package scope `@phillybricks/*`→`@bandbox/*`; keep internal infra names `phillybricks_worker`/`phillybricks-tiles`/`pb-*`).
 > 2. **Monetization postponed** — relax the two paid gates (`requireEntitlement`→`requireUser`)
