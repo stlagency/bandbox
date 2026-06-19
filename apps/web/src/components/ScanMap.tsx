@@ -15,7 +15,9 @@
  * Recolors on lens + theme change; click a neighborhood → onSelect(feature).
  */
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import maplibregl from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureCollection } from 'geojson';
 import type { LensMetric, ScanFeature } from '@phillybricks/core/contracts';
@@ -24,6 +26,19 @@ import { LENS_RAMPS } from '../lib/mock/scan';
 const DRAFT_BG = '#1C2530';
 const DRAFT_LINE = '#7FB0E0';
 const PHILLY_BOUNDS: [number, number, number, number] = [-75.2803, 39.8670, -74.9558, 40.1379];
+
+/** Public PMTiles base (Supabase Storage); exposed to the client via NEXT_PUBLIC_. */
+const TILES_BASE = process.env.NEXT_PUBLIC_TILES_BASE_URL;
+/** Vector source-layer name inside parcels.pmtiles (must match packages/tiles PARCEL_LAYER). */
+const PARCEL_SOURCE_LAYER = 'parcels';
+
+let pmtilesRegistered = false;
+/** Register the pmtiles:// protocol with MapLibre once (client-side). */
+function ensurePmtilesProtocol(): void {
+  if (pmtilesRegistered) return;
+  maplibregl.addProtocol('pmtiles', new Protocol().tile);
+  pmtilesRegistered = true;
+}
 
 /** A blank MapLibre style — no external tiles, just the draft-navy ground. */
 const blankStyle: maplibregl.StyleSpecification = {
@@ -108,6 +123,7 @@ export interface ScanMapProps {
 
 export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: ScanMapProps) {
   const theme = useTheme();
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Geometry is stamped with the geoType it was loaded for, so a paint that
@@ -122,6 +138,7 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
   // Initialize the map once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    ensurePmtilesProtocol();
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: blankStyle,
@@ -221,12 +238,9 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
         source: 'hoods',
         paint: {
           'fill-color': fillColorExpr(ramp),
-          'fill-opacity': [
-            'case',
-            ['boolean', ['feature-state', 'hover'], false],
-            0.88,
-            0.74,
-          ],
+          // Fade the choropleth as you zoom in so the per-parcel grid reads on the
+          // draft ground (zoom must be the top-level interpolate input in MapLibre).
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.74, 15, 0.12],
         },
       });
       map.addLayer({
@@ -236,8 +250,72 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
         paint: { 'line-color': DRAFT_LINE, 'line-width': 0.6, 'line-opacity': 0.7 },
       });
       wireInteractions(map);
+      addParcelLayer(map);
     }
     setStatus('ready');
+  }
+
+  /**
+   * High-zoom per-parcel layer from parcels.pmtiles on Supabase Storage (the
+   * single nightly object, PRD §6). A faint fill is the click target → parcel
+   * deep-dive; survey-blue outlines draw the parcel grid. Shown only at zoom ≥ 14
+   * so it sits "under" the choropleth read at city scale and reveals on zoom-in.
+   * No-ops if the public tiles base isn't configured (NEXT_PUBLIC_TILES_BASE_URL).
+   */
+  function addParcelLayer(map: maplibregl.Map) {
+    if (!TILES_BASE || map.getSource('parcels')) return;
+    map.addSource('parcels', {
+      type: 'vector',
+      url: `pmtiles://${TILES_BASE}/parcels.pmtiles`,
+      promoteId: 'parcel_pk',
+    });
+    map.addLayer({
+      id: 'parcels-fill',
+      type: 'fill',
+      source: 'parcels',
+      'source-layer': PARCEL_SOURCE_LAYER,
+      minzoom: 14,
+      paint: {
+        'fill-color': DRAFT_LINE,
+        'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.18, 0.02],
+      },
+    });
+    map.addLayer({
+      id: 'parcels-line',
+      type: 'line',
+      source: 'parcels',
+      'source-layer': PARCEL_SOURCE_LAYER,
+      minzoom: 14,
+      paint: {
+        'line-color': DRAFT_LINE,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.5, 17, 1.4],
+        'line-opacity': 0.8,
+      },
+    });
+    wireParcelInteractions(map);
+  }
+
+  /** Hover highlight + click a parcel → /parcel/[pk] deep-dive. */
+  function wireParcelInteractions(map: maplibregl.Map) {
+    let hovered: string | number | undefined;
+    const fs = (id: string | number) => ({ source: 'parcels', sourceLayer: PARCEL_SOURCE_LAYER, id });
+    map.on('mousemove', 'parcels-fill', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features?.[0];
+      if (!f) return;
+      if (hovered !== undefined) map.setFeatureState(fs(hovered), { hover: false });
+      hovered = f.id as string | number;
+      map.setFeatureState(fs(hovered), { hover: true });
+    });
+    map.on('mouseleave', 'parcels-fill', () => {
+      map.getCanvas().style.cursor = '';
+      if (hovered !== undefined) map.setFeatureState(fs(hovered), { hover: false });
+      hovered = undefined;
+    });
+    map.on('click', 'parcels-fill', (e) => {
+      const pk = (e.features?.[0]?.properties as { parcel_pk?: string | number } | undefined)?.parcel_pk;
+      if (pk !== undefined && pk !== null) router.push(`/parcel/${pk}`);
+    });
   }
 
   /** Hover feature-state + click → onSelect. */
