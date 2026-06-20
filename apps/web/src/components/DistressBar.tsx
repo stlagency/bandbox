@@ -123,19 +123,19 @@ export function DistressBar({ result, showDetail = true, intro }: DistressBarPro
           <h4>{active.label}</h4>
           <div className="pb-deco-grid">
             <div className="pb-deco-cell">
-              <p className="pb-mlabel">RAW</p>
+              <p className="pb-mlabel">Raw</p>
               <span className="pb-v">{active.raw_display}</span>
             </div>
             <div className="pb-deco-cell">
-              <p className="pb-mlabel">NORMALIZED</p>
+              <p className="pb-mlabel">Normalized</p>
               <span className="pb-v">{active.normalized.toFixed(2)}</span>
             </div>
             <div className="pb-deco-cell">
-              <p className="pb-mlabel">WEIGHT</p>
+              <p className="pb-mlabel">Weight</p>
               <span className="pb-v">{active.weight.toFixed(2)}</span>
             </div>
             <div className="pb-deco-cell">
-              <p className="pb-mlabel">CONTRIBUTION</p>
+              <p className="pb-mlabel">Contribution</p>
               <span className="pb-v">{Math.round(active.contribution * 100)}</span>
             </div>
           </div>

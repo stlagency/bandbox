@@ -61,7 +61,27 @@ them. The parcel deep-dive shows the target balance already exists in the system
 - Type: keep the 4-font *delegation* (Tanker display / Zodiak voice / Satoshi UI /
   Space Mono data) — the fix is the *label treatment*, not dropping a family.
 
-## Implementation plan — analysis complete, NOT yet implemented
+## ✅ EXECUTED 2026-06-20 (branch `design-restraint`, not yet merged)
+
+Implemented as one coherent pass across **10 files** (token layer in both `TOKENS.css` + `globals.css`; `components.css` levers B/C/D + the mobile-shadow scope fix; `leads.css`; `Pill.tsx` `urgent` kind; 4 JSX de-caps in `DistressBar`/`DeepDive`/`ValueDerivationDrawer`; `DESIGN.md` synced + addendum). Bracketed by **two adversarial-review workflows** — a pre-flight completeness/usage/brand audit (caught the `--frame`/`--mass` gravel-strand bug + ~11 missed labels + the brick-fill-vs-DESIGN.md tension before editing) and a post-implementation a11y/brand/completeness review.
+
+**Review fixes applied** beyond the original plan:
+- `.pb-ledger thead th` (deep-dive sale-history table) was ALSO re-cast to sentence-case — the plan only named the leads table, leaving this one shouty.
+- `.pb-btn--secondary` + `.pb-btn--ghost` **type** re-cast to sentence-case Satoshi (the plan tiered only their border/shadow; `.pb-btn` base still forced mono-caps). Primary CTA stays mono-caps (sanctioned). De-capped the two hardcoded JSX literals (`ADD NOTE +` → `Add note +`, `EXPORT RECORD` → `Export record`).
+- Ghost button border kept **1px ink** (not gravel): 1px gravel on transparent is ~1.6–2:1, under WCAG SC 1.4.11 3:1, and the border is the button's only affordance. 1px ink stays tiered/thin but visible.
+- `.pb-mlabel`/`.pb-eyebrow` weight 500→**600** (thinner Satoshi at 11px needs the weight for legibility).
+- `--pb-red` comment reworded off the misleading "cap 1-2/screen" (DESIGN.md's own sanctioned reds run to 3–4 on the distress scan) to a "heroes only" framing. Stale comments in `Card.tsx`/`LensSwitcher.tsx` fixed.
+
+**Verified:** typecheck + lint green; `pnpm run verify` green (db/core/tiles/ingestion + portability + security gates); homepage/parcel/leads eyeballed in light + dark with no console errors; tiering confirmed via computed styles (plain card 1px gravel/no-shadow vs `--frame` 4px ink/shadow).
+
+**Deferred (NOT done — future work):**
+- **Pre-existing light-theme small-label contrast** — slate (#8A8479) labels at 11px are ~2.9–3.7:1 on paper/surface (under AA 4.5:1). This predates the restraint pass (color unchanged); fixing it means darkening the slate token or bumping these labels toward ink — a separate a11y task.
+- **Wire `.pb-pill--urgent`** to a genuine crisis signal (e.g. unsafe/imminently-dangerous) — the class + `PillKind` member exist but no call site consumes it yet.
+- `--pb-shadow-tier1` is defined (both files) but unused — kept as a documented forward token.
+- `account.css` is a separate token fork (`--pb-acc-*`, rounded corners, hairline borders) — left isolated; a candidate for its own reconciliation pass.
+- Rail density / progressive-disclosure-on-zoom + leads redundant columns (the original DEFER list below).
+
+## Implementation plan — analysis complete, ✅ NOW IMPLEMENTED (see EXECUTED note above)
 
 A 5-lens analysis (typography · color-red · border-shadow · density · brand-guardian)
 + synthesis produced this de-conflicted, DESIGN.md-grounded MODERATE change-set. The

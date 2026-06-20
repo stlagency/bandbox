@@ -72,7 +72,7 @@ export function ValueDerivationDrawer({ comps, livableArea }: ValueDerivationDra
           </span>
           <span className="pb-deriv-est">{fmtUsd(est.estimate)}</span>
         </span>
-        <span className="pb-deriv-toggle">{open ? 'HIDE THE MATH −' : 'SHOW THE MATH +'}</span>
+        <span className="pb-deriv-toggle">{open ? 'Hide the math −' : 'Show the math +'}</span>
       </button>
 
       <div

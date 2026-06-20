@@ -1,7 +1,7 @@
 /**
- * Card — Bone surface, 3px (or 4px "frame") ink border, offset hard shadow,
- * square corners (DESIGN.md §Components). Optional header in Satoshi-900
- * small-caps over a 3px divider, with an optional mono "tally" on the right.
+ * Card — Bone surface, tier-1 1px gravel hairline by default, or 4px ink + offset
+ * shadow when "frame"/"mass" (DESIGN.md §Components, restraint pass). Optional header
+ * in Satoshi-700 sentence-case over a 3px divider, with an optional mono "tally".
  */
 import type { HTMLAttributes } from 'react';
 

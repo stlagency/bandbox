@@ -121,7 +121,7 @@
   --pb-sky:        #6FA8DC;  /* secondary accents                     */
   --pb-sky-tint:   #DCE8F6;  /* highlight fill behind ONE 2nd metric  */
 
-  --pb-red:        #E81828;  /* SIGNAL ONLY: distress / CTA / active   */
+  --pb-red:        #E81828;  /* SIGNAL ONLY · heroes: distress/CTA/active-parcel/mark */
   --pb-brick:      #A8341F;  /* TEXT/EDGE ACCENT ONLY — never a fill   */
 
   /* on-color text (from the mockups) */
@@ -154,15 +154,17 @@
   --pb-border-w:    3px;   /* default party-wall            */
   --pb-border-w-lg: 4px;   /* promoted primary regions       */
   --pb-border-w-in: 1px;   /* within-card hairline (gravel)  */
+  --pb-border-w-tier1: 1px;/* tiered secondary device edge   */
   --pb-radius:      0;     /* square corners, always         */
   --pb-shadow:      6px 6px 0 var(--pb-shadow-ink);  /* cards/marks  */
   --pb-shadow-lg:   8px 8px 0 var(--pb-shadow-ink);  /* hero + CTA   */
   --pb-shadow-mass: 10px 10px 0 var(--pb-shadow-ink);/* 1 block/screen */
+  --pb-shadow-tier1: 2px 2px 0 var(--pb-shadow-ink); /* tiered secondary, if used */
 
-  /* ---- Spacing (4..48; B's loosened rhythm) ---- */
+  /* ---- Spacing (4..48; B's loosened rhythm, restraint-tightened) ---- */
   --pb-space-1: 4px;  --pb-space-2: 8px;  --pb-space-3: 12px;
-  --pb-space-4: 14px; --pb-space-5: 18px; --pb-space-6: 22px;
-  --pb-space-7: 34px; /* group gutter */ --pb-space-8: 48px; /* section air */
+  --pb-space-4: 14px; --pb-space-5: 18px; --pb-space-6: 20px;
+  --pb-space-7: 30px; /* group gutter */ --pb-space-8: 48px; /* section air */
   /* DESIGN.md also names these --pb-space-8/9; alias for parity */
   --pb-space-9: 48px;
 

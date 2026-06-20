@@ -22,11 +22,11 @@
   gap: var(--pb-space-4);
 }
 .pb-leads-total {
-  font-family: var(--pb-font-mono);
+  font-family: var(--pb-font-ui);
   font-size: var(--pb-text-sm);
   font-weight: 700;
-  letter-spacing: var(--pb-track-label);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pb-slate);
 }
 .pb-leads-exportmsg {
@@ -34,7 +34,7 @@
   font-family: var(--pb-font-mono);
   font-size: var(--pb-text-sm);
   font-weight: 700;
-  color: var(--pb-red);
+  color: var(--pb-blue);
 }
 
 .pb-leads-tablewrap {
@@ -57,11 +57,11 @@
 }
 .pb-leads-table th {
   text-align: left;
-  font-family: var(--pb-font-mono);
+  font-family: var(--pb-font-ui);
   font-size: var(--pb-text-xs);
   font-weight: 700;
-  letter-spacing: var(--pb-track-label);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pb-slate);
   padding: var(--pb-space-3) var(--pb-space-3);
   border-bottom: var(--pb-border-w) solid var(--pb-ink);
@@ -129,11 +129,11 @@
   text-align: right;
 }
 .pb-leads-save {
-  font-family: var(--pb-font-mono);
+  font-family: var(--pb-font-ui);
   font-size: var(--pb-text-xs);
   font-weight: 700;
-  letter-spacing: var(--pb-track-label);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pb-ink);
   background: var(--pb-surface);
   border: var(--pb-border-w-in) solid var(--pb-ink);
@@ -153,11 +153,11 @@
   justify-content: flex-end;
 }
 .pb-leads-skip {
-  font-family: var(--pb-font-mono);
+  font-family: var(--pb-font-ui);
   font-size: var(--pb-text-xs);
   font-weight: 700;
-  letter-spacing: var(--pb-track-label);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--pb-ink-soft, var(--pb-ink));
   background: transparent;
   border: var(--pb-border-w-in) dotted var(--pb-ink);

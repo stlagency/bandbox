@@ -326,7 +326,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
         <Wordmark variant="boxed" />
         <div className="pb-header-id">
           <p className="pb-eyebrow">
-            PARCEL DEEP-DIVE · {(p.neighborhood_name ?? '').toUpperCase()} /{' '}
+            Parcel deep-dive · {p.neighborhood_name ?? ''} /{' '}
             {p.zip ?? ''}
           </p>
           <h1 className="pb-address">{p.address}</h1>
@@ -610,7 +610,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
             aria-labelledby="distHead"
           >
             <div className="pb-distress-score">
-              <p className="pb-mlabel">DISTRESS</p>
+              <p className="pb-mlabel">Distress</p>
               <p className="pb-mval">{data.distress.score100}</p>
             </div>
 
@@ -622,8 +622,8 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
               <Button variant="primary" onClick={saveLead}>
                 {saveLabel}
               </Button>
-              <Button variant="secondary">ADD NOTE +</Button>
-              <Button variant="ghost">EXPORT RECORD</Button>
+              <Button variant="secondary">Add note +</Button>
+              <Button variant="ghost">Export record</Button>
             </div>
           </Card>
         </main>

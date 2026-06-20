@@ -2,9 +2,9 @@
 
 /**
  * LensSwitcher — inline segmented control of the 4 map lenses (DESIGN.md
- * §Lens switcher). Active cell = ink fill + bone label + a 3px red bottom-
- * marker block (a chunk, not a thin stripe); exactly one active so color means
- * one thing. Controlled component: parent owns the active lens.
+ * §Lens switcher). Active cell = ink fill + bone label + a blue bottom-
+ * marker block (a chunk, not a thin stripe; restraint pass — red is reserved
+ * for the budget); exactly one active. Controlled: parent owns the active lens.
  */
 import type { LensMetric } from '@bandbox/core/contracts';
 
