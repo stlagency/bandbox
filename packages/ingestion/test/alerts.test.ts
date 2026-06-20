@@ -110,6 +110,23 @@ describe('runAlerts', () => {
     expect(rep.eventsInserted).toBe(3);
   });
 
+  it('does not re-deliver alerts already in the feed (dedup across the overlapping day)', async () => {
+    // P1's new_transaction was already delivered on a prior run.
+    const db = fakeDb([
+      ...handlers(),
+      { match: /from app\.alert_event/i, rows: () => [{ k: 'P1|new_transaction|2026-06-15' }] },
+    ]);
+    const { sender, sent } = recordingSender();
+
+    const rep = await runAlerts(db, { send: sender });
+
+    // P1 transaction filtered; P2 distress + P1 matching-lead remain = 2.
+    expect(rep.eventsInserted).toBe(2);
+    const inserts = db.calls.filter((c) => /insert into app\.alert_event/i.test(c.q));
+    expect(inserts).toHaveLength(2);
+    expect(sent[0]!.htmlBody).toContain('2 Main St');
+  });
+
   it('advances last_sent_at and sends nothing when there are no fresh rows', async () => {
     const db = fakeDb(handlers(DUE_SUB, []));
     const { sender, sent } = recordingSender();

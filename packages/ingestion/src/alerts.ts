@@ -302,13 +302,28 @@ export async function runAlerts(db: DbClient, opts: RunAlertsOptions = {}): Prom
         }
       }
 
-      if (items.length === 0) {
+      // Dedup against alerts already delivered to this user. The window is DATE-
+      // granular (changed_on/observed_on are dates) and `since` = the last digest's
+      // calendar day, so each run re-queries that whole day; drop anything already
+      // recorded (by parcel + trigger + event date) so neither the feed nor the
+      // email repeats — while still catching genuinely new same-day events.
+      const existing = await db<{ k: string }[]>`
+        select distinct
+          (parcel_pk || '|' || trigger_type || '|' || coalesce(payload->>'on_date', '')) as k
+        from app.alert_event
+        where user_id = ${sub.user_id} and created_at >= now() - interval '9 days'`;
+      const seenKeys = new Set(existing.map((r) => r.k));
+      const pending = items.filter(
+        (it) => !seenKeys.has(`${it.parcel_pk}|${it.trigger_type}|${it.on_date ?? ''}`),
+      );
+
+      if (pending.length === 0) {
         await db`update app.alert_subscription set last_sent_at = now() where id = ${sub.id}`;
         continue;
       }
 
       // 2. write the in-app feed (durable record), one row per item.
-      for (const it of items) {
+      for (const it of pending) {
         const payload = JSON.stringify({
           address: it.address,
           summary: it.summary,
@@ -326,7 +341,7 @@ export async function runAlerts(db: DbClient, opts: RunAlertsOptions = {}): Prom
         const unsubUrl = sub.unsub_token
           ? `${baseUrl}/api/unsubscribe?token=${encodeURIComponent(sub.unsub_token)}`
           : null;
-        const { subject, html, text } = renderDigest(sub.area_name, items, baseUrl, unsubUrl, perTriggerCap);
+        const { subject, html, text } = renderDigest(sub.area_name, pending, baseUrl, unsubUrl, perTriggerCap);
         const res = await opts.send.send({
           to: [{ address: sub.email }],
           subject,
