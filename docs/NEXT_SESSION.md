@@ -13,8 +13,9 @@
 > live**; **Vercel↔GitHub auto-deploy connected** (push to `main` auto-deploys); **Cloudflare DNS wired —
 > https://www.bandbox.pro LIVE with valid SSL** (apex 308-redirects → www; DNS token at
 > `memory/cloudflare-dns-token.secret`).
-> **Still open (deferred by design):** **ZeptoMail** `ZEPTOMAIL_TOKEN` (M7 — the `bandbox.pro` sending
-> domain is already DKIM/SPF/bounce-configured via Zoho); **Stripe** keys (M8 only).
+> **✅ ZeptoMail READY** — token at `memory/zeptomail-token.secret`, `bandbox.pro` verified, live test send
+> from `noreply@bandbox.pro` returned `OK` (M7 just builds the digest *code*).
+> **Still open (deferred by design):** the M7 build itself (auth + alerts + ZeptoMail digest); **Stripe** keys (M8 only).
 
 **M0 → M6 are complete and live in production.** The nightly ingests all 14 open-data sources + the sheriff scraper into a live Supabase warehouse, the four correctness gates are wired, `parcel_change_log` history is accruing (the one irreplaceable asset, PRD §0.6), the derived layer (distress composite, comps, geo_metric, geo boundaries) is built + live-verified, the **serving + map layer is shipped** (5 read APIs + MapLibre 4-lens scan + per-parcel tiles), the **property deep-dive (M5)** renders every figure bound to live sourced data with zero fabrication, and the **leads + mini-CRM + CSV export + BYO skip-trace (M6)** app-layer is built + verified — all deployed at **https://www.bandbox.pro**. **Your next milestone is M7 — accounts + alerts (free): Supabase Auth + ZeptoMail alert digest (no Stripe — monetization is M8).** The single thing M7 unlocks is the auth seam in `apps/web/src/lib/auth.ts` (today the login-gated surfaces correctly 401); see **Next milestone — M7** below.
 
@@ -104,7 +105,7 @@ Every figure on `/parcel/[pk]` binds to live `ParcelDeepDive` data or an honest 
 ## Next milestone — M7: accounts + alerts (free — no payments)
 - **Supabase Auth** → fill in `getUserId(req)` in `apps/web/src/lib/auth.ts` (resolve the session cookie / `Authorization: Bearer <jwt>` → `auth.uid()`); drop the `BANDBOX_DEV_USER_ID` seam. That single change lights up the (now free, login-gated) CSV export, mini-CRM save, and skip-trace.
 - Wire the skip-trace **attestation** UI (writes `app.profile.attested_skiptrace_at`) + **Supabase Vault** for `decryptKey` + a **shared/DB skip-trace daily-cap** store (the in-memory one is per-instance).
-- **Saved areas** (3 modes) + **alerts**: nightly diff → `app.alert_event` → **ZeptoMail** digest (raw HTTPS `POST https://api.zeptomail.com/v1.1/email`, `Authorization: Zoho-enczapikey <ZEPTOMAIL_TOKEN>`; List-Unsubscribe / CAN-SPAM) + in-app feed + `/api/unsubscribe`. **`ZEPTOMAIL_TOKEN` + verified `bandbox.pro` sender needed**.
+- **Saved areas** (3 modes) + **alerts**: nightly diff → `app.alert_event` → **ZeptoMail** digest (raw HTTPS `POST https://api.zeptomail.com/v1.1/email`, `Authorization: Zoho-enczapikey <token>`; List-Unsubscribe / CAN-SPAM) + in-app feed + `/api/unsubscribe`. **Token + verified sender are READY** — `memory/zeptomail-token.secret`, sender `noreply@bandbox.pro` (or `alerts@bandbox.pro`), test send confirmed `OK`. Just build `sendViaZeptoMail` + wire it into the nightly (non-fatal); set `ZEPTOMAIL_TOKEN` on GH Actions + Vercel from the secret.
 - **No Stripe in M7.** DoD: sign in → save area → receive a real-change digest; unsubscribe works; skip-trace works end-to-end with a user key and leaks no key/PII.
 
 ## Deferred milestone — M8: monetization (when validated)

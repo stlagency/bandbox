@@ -35,7 +35,7 @@ Ingestion-first per PRD §9. State history (change-logs) only accrues forward an
 3. **Supabase Storage** bucket + S3 access keys (minted in the Supabase dashboard → Project Settings → Storage → S3 Access Keys) — at **M4** (tiles).
 4. ~~**www.bandbox.pro DNS**~~ — **DONE 2026-06-19**. Cloudflare `bandbox.pro` zone: `www` CNAME + apex CNAME (flattened) → `c83d3d1db37f4237.vercel-dns-016.com` (DNS-only); apex 308-redirects → www via Vercel. **www.bandbox.pro live with valid SSL.** Zoho/ZeptoMail email records coexist. DNS-edit token stored at `memory/cloudflare-dns-token.secret`.
 5. ~~**Vercel↔GitHub auto-deploy**~~ — **DONE 2026-06-19** (GitHub App reconnected → `vercel git connect` succeeded; push to `main` now auto-deploys to prod).
-6. **ZeptoMail** Send-Mail token (`ZEPTOMAIL_TOKEN`) + a verified `bandbox.pro` sending domain (DKIM/SPF) — at **M7** (alert digest).
+6. ~~**ZeptoMail** token + verified sending domain~~ — **READY 2026-06-19**. Token stored at `memory/zeptomail-token.secret`; `bandbox.pro` domain verified (DKIM/SPF/DMARC/bounce); live test send from `noreply@bandbox.pro` returned `OK`. **M7 only needs the digest send code** (`sendViaZeptoMail` + List-Unsubscribe). For GH Actions/Vercel, set `ZEPTOMAIL_TOKEN` from that file.
 7. **Stripe** API keys — at **M8** only (monetization deferred; not needed for M7).
 8. **healthchecks.io** monitor URL (`HEALTHCHECKS_URL`) — wire the liveness dead-man's-switch when convenient.
 
