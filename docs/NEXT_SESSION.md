@@ -10,11 +10,12 @@
 >
 > **Done:** memory/secrets migration (§0); PR merged (`stlagency/bandbox#1`, squash `15f080f`);
 > **repo renamed → `stlagency/bandbox`**; **Vercel project renamed → `bandbox`** + rebrand **deployed
-> live**; on-brand alias `bandbox-app.vercel.app` claimed; `www.bandbox.pro` + apex added to the project.
-> **Still open (human / blocked):** `www.bandbox.pro` **DNS** at Cloudflare (no DNS token in this
-> environment — live URL stays `bandbox-app.vercel.app` until wired; exact records in the pause-points
-> below); **Vercel↔GitHub auto-deploy** (`vercel git connect` needs the GitHub App authorized for the
-> renamed repo); the **ZeptoMail** account + `ZEPTOMAIL_TOKEN` (M7-time).
+> live**; on-brand alias `bandbox-app.vercel.app` claimed; `www.bandbox.pro` + apex added to the project;
+> **Vercel↔GitHub auto-deploy connected** (push to `main` auto-deploys).
+> **Still open:** `www.bandbox.pro` **DNS** records at the Cloudflare `bandbox.pro` zone (zone id
+> `309b9c34e88229d6fe9f0aa586d93f44`; needs a **Zone→DNS→Edit** token — the exact records are in the
+> pause-points below; live URL stays `bandbox-app.vercel.app` until wired); the **ZeptoMail** account +
+> `ZEPTOMAIL_TOKEN` (M7-time); **Stripe** keys (M8 only).
 
 **M0 → M6 are complete and live in production.** The nightly ingests all 14 open-data sources + the sheriff scraper into a live Supabase warehouse, the four correctness gates are wired, `parcel_change_log` history is accruing (the one irreplaceable asset, PRD §0.6), the derived layer (distress composite, comps, geo_metric, geo boundaries) is built + live-verified, the **serving + map layer is shipped** (5 read APIs + MapLibre 4-lens scan + per-parcel tiles), the **property deep-dive (M5)** renders every figure bound to live sourced data with zero fabrication, and the **leads + mini-CRM + CSV export + BYO skip-trace (M6)** app-layer is built + verified — all deployed at **https://bandbox-app.vercel.app**. **Your next milestone is M7 — accounts + alerts (free): Supabase Auth + ZeptoMail alert digest (no Stripe — monetization is M8).** The single thing M7 unlocks is the auth seam in `apps/web/src/lib/auth.ts` (today the login-gated surfaces correctly 401); see **Next milestone — M7** below.
 
