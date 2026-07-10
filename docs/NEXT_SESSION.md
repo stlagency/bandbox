@@ -1,5 +1,24 @@
 # Bandbox — resume here (next session)
 
+> **✅ 2026-07-09 — OUTAGE FIXED + MOBILE/UX PASS SHIPPED (commits `8c70c54`, `936afb0`, both live).**
+> (1) **The nightly had been dead ~3 weeks** (every scheduled run since ~Jun 19 hung silently to the 6h
+> Actions kill; matviews/tiles/alert digests never ran). Root causes fixed: worker DB connection now sets
+> `statement_timeout`/`lock_timeout`/`idle_in_transaction` (db.ts); the 303MB OPA body stream has an idle
+> stall-watchdog (`withStallGuard`); per-source start/done logging; nonzero exit on partial failure;
+> `nightly.yml` cap 360→150min + `/fail` ping on `cancelled()` + keep-alive stamps `run_started_at`.
+> **⚠️ STILL NEEDS AARON: create a healthchecks.io check + set the `HEALTHCHECKS_URL` repo secret** —
+> the dead-man's-switch is wired but unarmed, which is why 3 weeks went unnoticed.
+> (2) **P0 prod bug fixed:** skip-trace / save-lead / CSV export were 401 for every signed-in user (raw
+> `fetch` without the Bearer token; masked in dev by `BANDBOX_DEV_USER_ID`). All gated calls now use
+> `apiFetch`; a new `gate:authfetch` in `pnpm verify` blocks the regression class.
+> (3) **Mobile de-chunk + UI/UX pass** (Aaron: "chunky and blockish on mobile"): ≤640px token tier
+> (borders/shadows/type/spacing step down; identity anchors keep full weight — see DESIGN.md addendum),
+> map-first mobile IA (58svh map hero; nav restored at ≤760px — Leads was unreachable), parcel header
+> 640→420px + 5dp coords, wired rail CTAs (save-area + open-parcels→`/leads?neighborhood=`), honest
+> read-only scan rail (the inert filter mockup is gone), login `?next=` return, leads row-save feedback,
+> map loading overlay + touch dot sizes + keyboard geo picker + camera re-fit fix, dark-mode theme-button
+> contrast fix. Migration `0016` (norm_parcel search_path) applied to prod + committed.
+
 > ## ✅ Rescope DONE (executed 2026-06-19) — rebrand + descope + ZeptoMail
 > The three scoped changes from **[`docs/SCOPE_NEXT.md`](SCOPE_NEXT.md)** are executed and on this branch:
 > 1. **Renamed PhillyBricks → Bandbox**, canonical domain **www.bandbox.pro** (name + domain only;
