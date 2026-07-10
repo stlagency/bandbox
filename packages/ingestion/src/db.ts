@@ -42,15 +42,19 @@ export interface DbClient {
  * transaction pooler (port 6543, which doesn't support session-level prepared
  * statements); `ssl: 'require'` because the pooler mandates TLS. Caller owns `end()`.
  *
- * The `connection` block sets server-side time bounds (sent as startup params, so
- * they survive the transaction pooler — all three are USERSET GUCs). With `max: 1`
- * a single stuck statement blocks the ENTIRE nightly: before these bounds existed,
- * one stall hung the worker to GitHub Actions' 6h kill with zero output (the
- * Jun–Jul 2026 outage). `statement_timeout` is generous (15 min) because the
- * geo-stamp full-table `ST_Contains` UPDATE and the CONCURRENT matview refreshes
- * over 583K rows are legitimately heavy; the point is fail-fast-and-alert, not
- * a tight budget. A timeout rejects into the per-source catch (gate ≠ halt), so
- * the run still reaches finalize/tiles/alerts.
+ * TIME BOUNDS — what actually holds (measured, Jul 2026):
+ * - The `connection` startup params do NOT survive Supabase's transaction pooler
+ *   (measured live: server default `statement_timeout=2min` applies instead,
+ *   `lock_timeout=0`). They are kept for direct-connection/self-host deployments,
+ *   where they DO apply.
+ * - `idle_timeout: 20` is THE critical line — the root cause of the Jun–Jul 2026
+ *   outage. During a long fetch/normalize gap (35s of HTTP + minutes of sync CPU
+ *   on a big backlog batch) the idle pooled socket was silently reaped upstream;
+ *   the next query was written into the half-dead socket and postgres.js waited
+ *   FOREVER for a reply (no client-side timeout; process at 0% CPU in kevent,
+ *   confirmed by stack sample). Small nightly deltas never idled long enough —
+ *   which is why the bug only bit backlog runs. With idle_timeout the client
+ *   closes its own idle connections and reconnects FRESH for the next query.
  */
 export function connectFromEnv(): Sql {
   return postgres(databaseUrlFromEnv(), {
@@ -58,7 +62,11 @@ export function connectFromEnv(): Sql {
     prepare: false,
     ssl: 'require',
     onnotice: () => {},
+    idle_timeout: 20, // s — close idle conns client-side; next query reconnects (see above)
+    max_lifetime: 60 * 30, // s — recycle any connection after 30 min regardless
+    connect_timeout: 30, // s — bound (re)connects
     connection: {
+      // Direct-connection/self-host only (the transaction pooler drops these):
       statement_timeout: 900_000, // 15 min per statement
       lock_timeout: 30_000, // 30 s waiting on a lock
       idle_in_transaction_session_timeout: 120_000, // 2 min idle inside a tx

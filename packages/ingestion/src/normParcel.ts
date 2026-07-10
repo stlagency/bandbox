@@ -89,20 +89,30 @@ export async function persistQuarantine(
   ingestRunId: number | null,
 ): Promise<void> {
   if (rows.length === 0) return;
-  // Bulk insert via a single multi-row VALUES list. Schema-qualified relation is
-  // a constant (ops.parcel_key_quarantine); values are bound parameters.
-  const valuesSql: string[] = [];
-  const params: unknown[] = [];
-  let p = 1;
-  for (const r of rows) {
-    valuesSql.push(`($${p++}, $${p++}, $${p++}, $${p++})`);
-    params.push(r.raw_key, r.source, r.reason, ingestRunId);
+  // Bulk insert via multi-row VALUES lists, CHUNKED under the 65,534-param
+  // protocol ceiling (4 params/row). THE Jun–Jul 2026 nightly killer lived here:
+  // a 400k-row permits backlog batch quarantined >16,384 malformed keys, the
+  // single unchunked statement exceeded the ceiling, and postgres.js's
+  // MAX_PARAMETERS_EXCEEDED throw in the socket-write path stranded the query
+  // promise forever (0% CPU, idle socket) — daily-size batches never crossed
+  // the threshold, so only backlog runs died. 4 params × 500 rows = 2,000
+  // params/statement, matching the upsert/retire chunk convention.
+  const QUARANTINE_CHUNK = 500;
+  for (let i = 0; i < rows.length; i += QUARANTINE_CHUNK) {
+    const slice = rows.slice(i, i + QUARANTINE_CHUNK);
+    const valuesSql: string[] = [];
+    const params: unknown[] = [];
+    let p = 1;
+    for (const r of slice) {
+      valuesSql.push(`($${p++}, $${p++}, $${p++}, $${p++})`);
+      params.push(r.raw_key, r.source, r.reason, ingestRunId);
+    }
+    await db.unsafe(
+      `insert into ops.parcel_key_quarantine (raw_key, source, reason, ingest_run_id)
+       values ${valuesSql.join(', ')}`,
+      params,
+    );
   }
-  await db.unsafe(
-    `insert into ops.parcel_key_quarantine (raw_key, source, reason, ingest_run_id)
-     values ${valuesSql.join(', ')}`,
-    params,
-  );
 
   const malformed = rows.filter((r) => r.reason === 'malformed_key').length;
   if (malformed > 0 && ingestRunId !== null) {

@@ -80,4 +80,26 @@ describe('persistQuarantine — inserts rows + bumps malformed_key_count', () =>
     expect(db.indicesOf('insert into ops.parcel_key_quarantine').length).toBe(1);
     expect(db.indicesOf('malformed_key_count = malformed_key_count').length).toBe(0);
   });
+
+  it('chunks a huge batch under the 65,534-param protocol ceiling (the Jun–Jul 2026 nightly killer)', async () => {
+    // A 400k-row backlog batch quarantined >16,384 keys; the single unchunked
+    // statement (4 params/row) exceeded the ceiling and postgres.js's throw in
+    // the socket-write path stranded the query promise forever. 1,100 rows at a
+    // 500-row chunk must yield 3 inserts, each with ≤2,000 params.
+    const db = new FakeDb();
+    const rows = Array.from({ length: 1100 }, (_, i) =>
+      makeQuarantineRow(`bad-${i}`, 'permits', 'malformed_key'),
+    );
+    await persistQuarantine(db.client, rows, 9);
+    const inserts = db.indicesOf('insert into ops.parcel_key_quarantine');
+    expect(inserts.length).toBe(3);
+    for (const idx of inserts) {
+      expect((db.calls[idx]!.params ?? []).length).toBeLessThanOrEqual(2000);
+    }
+    // All rows persisted across the chunks.
+    const total = inserts.reduce((n, idx) => n + (db.calls[idx]!.params ?? []).length / 4, 0);
+    expect(total).toBe(1100);
+    // Count bump still runs exactly once.
+    expect(db.indicesOf('malformed_key_count = malformed_key_count').length).toBe(1);
+  });
 });
