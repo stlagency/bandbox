@@ -13,6 +13,7 @@
  *   (subscription_required is dormant — monetization deferred to M8.)
  */
 import { useState } from 'react';
+import Link from 'next/link';
 import type { SkipTraceResult } from '@bandbox/core/contracts';
 import { apiFetch } from '../lib/api-client';
 
@@ -20,7 +21,7 @@ type State =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'done'; result: SkipTraceResult }
-  | { kind: 'refused'; message: string };
+  | { kind: 'refused'; message: string; signin?: boolean };
 
 /** Map the proxy's {status, error} refusal to an honest, human one-liner. */
 function refusalMessage(status: number, code: string | undefined): string {
@@ -68,7 +69,7 @@ export function SkipTraceButton({ parcelPk }: SkipTraceButtonProps) {
         } catch {
           /* non-JSON refusal */
         }
-        setState({ kind: 'refused', message: refusalMessage(res.status, code) });
+        setState({ kind: 'refused', message: refusalMessage(res.status, code), signin: res.status === 401 });
         return;
       }
       const result = (await res.json()) as SkipTraceResult;
@@ -76,6 +77,14 @@ export function SkipTraceButton({ parcelPk }: SkipTraceButtonProps) {
     } catch {
       setState({ kind: 'refused', message: 'Skip-trace unavailable' });
     }
+  }
+
+  if (state.kind === 'refused' && state.signin) {
+    return (
+      <Link href="/login?next=/leads" className="pb-leads-skip">
+        Sign in to skip-trace
+      </Link>
+    );
   }
 
   if (state.kind === 'done') {

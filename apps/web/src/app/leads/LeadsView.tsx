@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LeadRow, LeadsResponse, LeadFacets } from '@bandbox/core/contracts';
 import { FilterRail, type FilterRailValue } from '../../components/FilterRail';
 import { LeadsTable } from '../../components/LeadsTable';
+import Link from 'next/link';
 import { Button } from '../../components/Button';
 import { apiFetch } from '../../lib/api-client';
 
@@ -42,15 +43,21 @@ function filterToParams(f: FilterRailValue): URLSearchParams {
   return p;
 }
 
-export function LeadsView() {
-  const [filter, setFilter] = useState<FilterRailValue>(EMPTY_FILTER);
+export function LeadsView({ initialNeighborhood = '' }: { initialNeighborhood?: string }) {
+  // Fresh Set so the module-level EMPTY_FILTER.signals instance is never shared
+  // into a distinct filter object.
+  const [filter, setFilter] = useState<FilterRailValue>(() =>
+    initialNeighborhood.trim() !== ''
+      ? { ...EMPTY_FILTER, signals: new Set<string>(), neighborhood: initialNeighborhood.trim() }
+      : EMPTY_FILTER,
+  );
   const [rows, setRows] = useState<LeadRow[]>([]);
   const [facets, setFacets] = useState<LeadFacets | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [exportMsg, setExportMsg] = useState<{ text: string; href?: string } | null>(null);
   const [retryTick, setRetryTick] = useState(0);
 
   // A stable serialization of the filter, so the debounced effect only refires on
@@ -133,12 +140,16 @@ export function LeadsView() {
     try {
       // Gated route (requirePaid) — apiFetch attaches the Bearer token.
       const res = await apiFetch(`/api/leads/export?${filterKey}`);
-      if (res.status === 401 || res.status === 403) {
-        setExportMsg('Sign in to export');
+      if (res.status === 401) {
+        setExportMsg({ text: 'Sign in to export →', href: '/login?next=/leads' });
+        return;
+      }
+      if (res.status === 403) {
+        setExportMsg({ text: 'Subscribe to export →', href: '/account' });
         return;
       }
       if (!res.ok) {
-        setExportMsg('Export failed');
+        setExportMsg({ text: 'Export failed' });
         return;
       }
       const blob = await res.blob();
@@ -151,21 +162,23 @@ export function LeadsView() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setExportMsg('Export failed');
+      setExportMsg({ text: 'Export failed' });
     }
   }, [filterKey]);
 
-  const onSave = useCallback(async (parcelPk: string) => {
-    // The mini-CRM save endpoint is owned by another stream; we call its frozen
-    // shape (POST /api/leads/save { parcel_pk }). Failures are non-fatal here.
+  const onSave = useCallback(async (parcelPk: string): Promise<'saved' | 'signin' | 'error'> => {
+    // Mini-CRM save (POST /api/leads/save). Return the outcome so the row
+    // button can show Saved / Sign in / Retry instead of silence.
     try {
-      await apiFetch('/api/leads/save', {
+      const res = await apiFetch('/api/leads/save', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ parcel_pk: parcelPk }),
       });
+      if (res.status === 401) return 'signin';
+      return res.ok ? 'saved' : 'error';
     } catch {
-      /* surfaced by the CRM stream's own UI; no-op here */
+      return 'error';
     }
   }, []);
 
@@ -199,7 +212,7 @@ export function LeadsView() {
 
         {exportMsg ? (
           <p className="pb-leads-exportmsg" role="status">
-            {exportMsg}
+            {exportMsg.href ? <Link href={exportMsg.href}>{exportMsg.text}</Link> : exportMsg.text}
           </p>
         ) : null}
 

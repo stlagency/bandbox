@@ -18,35 +18,8 @@
   align-items: center;
   gap: 0.9rem;
 }
-.pb-account {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.pb-account-link {
-  color: #fff;
-  font-size: 0.85rem;
-  text-decoration: none;
-  max-width: 16ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pb-account-link:hover {
-  text-decoration: underline;
-}
-.pb-account-signout {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
-  font-size: 0.72rem;
-  padding: 0.18rem 0.5rem;
-  border-radius: 2px;
-  cursor: pointer;
-}
-.pb-account-signout:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
+/* Account header controls (.pb-account*) moved to components.css so the
+   deep-dive header can render AccountNav without importing this file. */
 
 /* ── Shared buttons ── */
 .pb-btn {

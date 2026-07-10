@@ -6,13 +6,17 @@
  * the session it establishes is what lib/api-client attaches to gated API calls.
  */
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 type Mode = 'signin' | 'signup';
 
 export function LoginForm() {
   const router = useRouter();
+  // Return the user to where they hit the auth wall (?next=/parcel/…); only
+  // same-origin paths are honored so the param can't become an open redirect.
+  const rawNext = useSearchParams().get('next');
+  const dest = rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/account';
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,13 +32,13 @@ export function LoginForm() {
       if (mode === 'signin') {
         const { error } = await supa.auth.signInWithPassword({ email, password });
         if (error) return setMsg(error.message);
-        router.push('/account');
+        router.push(dest);
         router.refresh();
       } else {
         const { data, error } = await supa.auth.signUp({ email, password });
         if (error) return setMsg(error.message);
         if (data.session) {
-          router.push('/account');
+          router.push(dest);
           router.refresh();
         } else {
           setMsg('Account created — check your email to confirm, then sign in.');

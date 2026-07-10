@@ -29,6 +29,8 @@ import {
 } from '../../../components/Ledger';
 import { SourceStamp } from '../../../components/SourceStamp';
 import { apiFetch } from '../../../lib/api-client';
+import Link from 'next/link';
+import { AccountNav } from '../../../components/AccountNav';
 import { GlossaryTerm } from '../../../components/GlossaryTerm';
 import { DistressBar } from '../../../components/DistressBar';
 import { ValueDerivationDrawer } from '../../../components/ValueDerivationDrawer';
@@ -180,15 +182,17 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
   const p = data.parcel;
   const a = data.assessment_vs_sale;
   // Only clauses where the value actually exists — no guessed ROW/1BA defaults.
-  const subaddr = [
+  const subaddrCore = [
     `OPA ${p.parcel_pk}`,
-    p.lat != null && p.lon != null ? `LAT ${p.lat} LON ${p.lon}` : null,
     p.zoning ? `ZONING ${p.zoning}` : null,
     p.beds != null ? `${p.beds} BR` : null,
     p.livable_area != null ? `${p.livable_area.toLocaleString('en-US')} SF` : null,
   ]
     .filter(Boolean)
     .join(' · ');
+  // 5dp ≈ 1m — survey-table precision; hidden entirely at mobile widths.
+  const subaddrGeo =
+    p.lat != null && p.lon != null ? `LAT ${p.lat.toFixed(5)} LON ${p.lon.toFixed(5)}` : null;
 
   const shownComps = curateComps(data.comps.comps, COMP_DISPLAY_CAP);
   const totalTrimmed = data.comps.distribution.n_trimmed;
@@ -306,11 +310,9 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
       ? 'SAVED ✓'
       : saveState === 'saving'
         ? 'SAVING…'
-        : saveState === 'signin'
-          ? 'SIGN IN TO SAVE'
-          : saveState === 'error'
-            ? 'TRY AGAIN →'
-            : 'SAVE THIS LEAD →';
+        : saveState === 'error'
+          ? 'TRY AGAIN →'
+          : 'SAVE THIS LEAD →';
 
   const neighborhood = p.neighborhood_name ?? '—';
   const atlasHref = atlasUrl(p.address);
@@ -324,16 +326,31 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
       </span>
 
       <header className="pb-header">
-        <Wordmark variant="boxed" />
+        <Link href="/" className="pb-marklink" aria-label="Bandbox — back to Market Scan">
+          <Wordmark variant="boxed" />
+        </Link>
         <div className="pb-header-id">
+          <nav className="pb-crumbs pb-crumbs--onnavy" aria-label="Breadcrumb">
+            <Link href="/">Market Scan</Link>
+            <span aria-hidden="true">›</span>
+            <Link href="/leads">Leads</Link>
+            <span aria-hidden="true">›</span>
+            <span aria-current="page">This parcel</span>
+          </nav>
           <p className="pb-eyebrow">
             Parcel deep-dive · {p.neighborhood_name ?? ''} /{' '}
             {p.zip ?? ''}
           </p>
           <h1 className="pb-address">{p.address}</h1>
-          <p className="pb-subaddr">{subaddr}</p>
+          <p className="pb-subaddr">
+            {subaddrCore}
+            {subaddrGeo ? <span className="pb-subaddr-geo"> · {subaddrGeo}</span> : null}
+          </p>
         </div>
-        <ThemeToggle variant="ink" labelStyle="long" />
+        <div className="pb-topactions">
+          <AccountNav />
+          <ThemeToggle variant="ink" labelStyle="long" />
+        </div>
       </header>
 
       <div className="pb-shell-dd">
@@ -620,9 +637,18 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
             <CommunitySignal>{communityCopy}</CommunitySignal>
 
             <div className="pb-actions">
-              <Button variant="primary" onClick={saveLead}>
-                {saveLabel}
-              </Button>
+              {saveState === 'signin' ? (
+                <Link
+                  href={`/login?next=/parcel/${encodeURIComponent(p.parcel_pk)}`}
+                  className="pb-btn pb-btn--primary"
+                >
+                  SIGN IN TO SAVE →
+                </Link>
+              ) : (
+                <Button variant="primary" onClick={saveLead}>
+                  {saveLabel}
+                </Button>
+              )}
               <Button variant="secondary">Add note +</Button>
               <Button variant="ghost">Export record</Button>
             </div>

@@ -172,6 +172,17 @@
   --pb-focus: var(--pb-blue);
 }
 
+
+/* ---- Mobile spacing tier: gutters/card padding tighten; space-1..5 rhythm untouched ---- */
+@media (max-width: 640px) {
+  :root {
+    --pb-space-6: 16px; /* card padding */
+    --pb-space-7: 18px; /* group gutter (was 30) */
+    --pb-space-8: 28px; /* section air (was 48) */
+    --pb-space-9: 28px; /* alias, kept in sync */
+  }
+}
+
 /* ---- DARK: warm-umber lamplit instrument (the blueprint family at night) ---- */
 html[data-theme="dark"] {
   --pb-ink:        #0C1016;  /* hard border ink (shadows use this)     */

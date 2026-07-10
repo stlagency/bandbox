@@ -36,6 +36,14 @@
   padding: var(--pb-space-4) var(--pb-space-6);
   border-left: var(--pb-border-w) solid rgba(255, 255, 255, 0.16);
 }
+/* Account control (AccountNav) — on-navy; used in TopBand and the deep-dive header.
+   Moved from account.css so the parcel header can render it without importing
+   account.css (whose .pb-btn fork would clobber the brutalist buttons). */
+.pb-account { display: inline-flex; align-items: center; gap: 0.6rem; }
+.pb-account-link { color: #fff; font-size: 0.85rem; text-decoration: none; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-account-link:hover { text-decoration: underline; }
+.pb-account-signout { background: transparent; border: 1px solid rgba(255, 255, 255, 0.4); color: #fff; font-size: 0.72rem; padding: 0.18rem 0.5rem; border-radius: 2px; cursor: pointer; }
+.pb-account-signout:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* ---------- Wordmark ---------- */
 .pb-wordmark { font-family: var(--pb-font-display); letter-spacing: var(--pb-track-tight); line-height: 0.82; }
@@ -67,7 +75,8 @@ html[data-theme='dark'] .pb-wordmark .pb-l2 { color: var(--pb-brick); }
 .pb-themebtn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--pb-shadow-ink); }
 /* Ink variant (deep-dive header) */
 .pb-themebtn--ink {
-  background: var(--pb-ink); color: var(--pb-paper);
+  /* on-navy (light in BOTH themes) — var(--pb-paper) went dark-on-dark in dark mode */
+  background: var(--pb-ink); color: var(--pb-on-navy);
   box-shadow: var(--pb-shadow); padding: var(--pb-space-3) var(--pb-space-5);
   letter-spacing: var(--pb-track-label);
 }
@@ -86,6 +95,8 @@ html[data-theme='dark'] .pb-btn--secondary { color: var(--pb-text); }
 /* ghost: tier-1 thin, but keep an INK edge — the border is the only affordance (a11y). */
 .pb-btn--ghost { background: transparent; color: var(--pb-text); box-shadow: none; border-width: var(--pb-border-w-tier1); border-color: var(--pb-ink); font-family: var(--pb-font-ui); letter-spacing: 0; text-transform: none; }
 .pb-btn--ghost.pb-btn--noshadow { box-shadow: none; }
+/* pb-btn on an <a> (Link-as-button): kill the UA underline; class colors already win. */
+a.pb-btn { text-decoration: none; }
 .pb-btn:active { transform: translate(2px, 2px); box-shadow: 4px 4px 0 var(--pb-shadow-ink); }
 .pb-btn--primary:active { box-shadow: 4px 4px 0 var(--pb-shadow-ink); }
 
@@ -308,6 +319,9 @@ html[data-theme='dark'] .pb-pill--neutral { color: var(--pb-text); }
 }
 .pb-measureline .pb-lead { font-family: var(--pb-font-ui); font-size: var(--pb-text-xs); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--pb-label); display: block; margin-bottom: 6px; }
 .pb-stamp { font-family: var(--pb-font-mono); font-size: var(--pb-text-xs); color: var(--pb-label); white-space: nowrap; }
+/* Tapped-open definition for the measure term (touch-first replacement for the
+   hover-only title tooltip). Dotted slate hairline = sanctioned decorative use. */
+.pb-measureline .pb-msr-def { display: block; margin-top: var(--pb-space-2); padding-top: var(--pb-space-2); border-top: 1px dotted var(--pb-slate); font-style: italic; }
 
 /* ---------- ContextRail (teach-in-place) ---------- */
 .pb-rail {
@@ -416,6 +430,8 @@ html[data-theme='dark'] .pb-lensswitch button[aria-pressed='true'] { color: var(
 .pb-rangewrap { display: flex; flex-direction: column; gap: var(--pb-space-2); }
 .pb-rangewrap input[type='range'] { width: 100%; accent-color: var(--pb-blue); }
 .pb-rangeread { font-family: var(--pb-font-mono); font-size: var(--pb-text-sm); font-weight: 700; }
+/* Scan rail read-only fact (honest state echo: lens / geo / period). */
+.pb-scanfact { font-family: var(--pb-font-mono); font-size: var(--pb-text-sm); font-weight: 700; text-transform: uppercase; }
 .pb-tag-input {
   font-family: var(--pb-font-mono); font-size: var(--pb-text-sm);
   border: var(--pb-border-w) solid var(--pb-ink); border-radius: var(--pb-radius); padding: 9px 10px;
@@ -431,12 +447,18 @@ html[data-theme='dark'] .pb-lensswitch button[aria-pressed='true'] { color: var(
 .pb-maphead { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--pb-space-5); padding: var(--pb-space-7) var(--pb-space-7) var(--pb-space-5); }
 .pb-maphead h1 { font-family: var(--pb-font-display); font-size: var(--pb-text-3xl); line-height: 0.9; letter-spacing: var(--pb-track-tight); text-transform: uppercase; margin: 0; }
 .pb-maphead .pb-kicker { font-family: var(--pb-font-serif); font-style: italic; font-size: var(--pb-text-base); color: var(--pb-slate); margin: 0 0 var(--pb-space-2); }
-.pb-crumbs { font-family: var(--pb-font-ui); font-size: var(--pb-text-xs); letter-spacing: 0; text-transform: none; color: var(--pb-label); display: flex; gap: 8px; align-items: center; }
+.pb-crumbs { font-family: var(--pb-font-ui); font-size: var(--pb-text-xs); letter-spacing: 0; text-transform: none; color: var(--pb-label); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pb-crumbs b { color: var(--pb-blue); font-weight: 700; }
 .pb-crumbs button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--pb-label); background: none; border: none; padding: 0; cursor: pointer; }
 .pb-crumbs button:hover { color: var(--pb-blue); }
 .pb-crumbs button.pb-crumb-active { color: var(--pb-blue); font-weight: 700; }
 .pb-crumbs .pb-crumb-disabled { opacity: 0.45; cursor: default; }
+/* Keyboard/SR-reachable geo picker beside the crumbs (tier-1 secondary control). */
+.pb-geoselect {
+  font-family: var(--pb-font-ui); font-size: var(--pb-text-xs); color: var(--pb-text);
+  background: var(--pb-paper); border: var(--pb-border-w-tier1) solid var(--pb-gravel);
+  border-radius: 0; padding: 4px 8px; max-width: 220px;
+}
 .pb-lensbar { display: flex; align-items: center; gap: var(--pb-space-5); padding: 0 var(--pb-space-7) var(--pb-space-5); flex-wrap: wrap; }
 .pb-map-outer { margin: 0 var(--pb-space-7); }
 .pb-timestrip-wrap { margin: var(--pb-space-7) var(--pb-space-7) 0; }
@@ -464,6 +486,12 @@ html[data-theme='dark'] .pb-lensswitch button[aria-pressed='true'] { color: var(
 .pb-eyebrow { font-family: var(--pb-font-ui); font-size: var(--pb-text-xs); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--pb-sky); margin: 0 0 var(--pb-space-2); }
 .pb-address { font-family: var(--pb-font-display); letter-spacing: var(--pb-track-tight); line-height: 0.9; font-size: var(--pb-text-3xl); margin: 0; color: var(--pb-on-navy); }
 .pb-subaddr { font-family: var(--pb-font-mono); font-size: var(--pb-text-sm); color: var(--pb-sky); margin: var(--pb-space-2) 0 0; letter-spacing: 0.04em; }
+/* Deep-dive header: linked wordmark + on-navy breadcrumb */
+.pb-marklink { display: inline-flex; text-decoration: none; color: inherit; }
+.pb-crumbs--onnavy { margin: 0 0 var(--pb-space-2); color: var(--pb-sky); }
+.pb-crumbs--onnavy a { color: var(--pb-sky); text-decoration: none; }
+.pb-crumbs--onnavy a:hover { color: var(--pb-on-navy); text-decoration: underline; text-underline-offset: 3px; }
+.pb-crumbs--onnavy [aria-current='page'] { color: var(--pb-on-navy); font-weight: 700; }
 .pb-shell-dd { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--pb-space-7); padding: var(--pb-space-8) var(--pb-space-7); max-width: 1240px; margin: 0 auto; align-items: start; }
 .pb-main { min-width: 0; display: flex; flex-direction: column; gap: var(--pb-space-7); }
 .pb-foot { text-align: center; padding: var(--pb-space-7); font-family: var(--pb-font-mono); font-size: var(--pb-text-xs); color: var(--pb-label); letter-spacing: 0.1em; border-top: var(--pb-border-w) solid var(--pb-ink); }
@@ -483,12 +511,35 @@ html[data-theme='dark'] .pb-lensswitch button[aria-pressed='true'] { color: var(
 }
 @media (max-width: 760px) {
   .pb-shell-scan { grid-template-columns: 1fr; }
-  .pb-filterrail { border-right: none; border-bottom: var(--pb-border-w-lg) solid var(--pb-ink); }
+  /* Mobile IA: product first. Map/list column leads; the rail drops to the end
+     of the stack (its lg ink border flips bottom→top accordingly). Applies to
+     /leads too (results-first; the controlled filter rail follows the table). */
+  .pb-shell-scan > .pb-mapcol { order: -1; }
+  .pb-filterrail { order: 1; border-right: none; border-top: var(--pb-border-w-lg) solid var(--pb-ink); border-bottom: none; }
   .pb-topband { flex-wrap: wrap; }
-  .pb-nav { display: none; }
+  /* Nav was display:none with NO replacement — Leads was unreachable on a phone.
+     Full-width scrollable row below the brand cluster; 12px pad ≈ 44px targets. */
+  .pb-nav {
+    order: 4;
+    flex: 1 1 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-top: var(--pb-border-w-in) solid rgba(255, 255, 255, 0.22);
+  }
+  .pb-nav a {
+    border-left: none;
+    border-right: var(--pb-border-w-in) solid rgba(255, 255, 255, 0.16);
+    padding: 12px var(--pb-space-5);
+    white-space: nowrap;
+  }
   .pb-maphead h1 { font-size: var(--pb-text-2xl); }
 }
 @media (max-width: 560px) {
+  /* Four lenses collapse to a 2×2 grid — "Livability" clipped at 375px. */
+  .pb-lensswitch { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .pb-lensswitch button { justify-content: flex-start; padding: 12px; min-height: 44px; }
+  .pb-lensswitch button:nth-child(2n) { border-right: none; }
+  .pb-lensswitch button:nth-child(-n+2) { border-bottom: var(--pb-border-w-tier1) solid var(--pb-gravel); }
   .pb-metric-strip { grid-template-columns: 1fr !important; }
   .pb-metric { border-right: 0; border-bottom: var(--pb-border-w) solid var(--pb-ink); }
   .pb-metric:last-child { border-bottom: 0; }
@@ -499,4 +550,78 @@ html[data-theme='dark'] .pb-lensswitch button[aria-pressed='true'] { color: var(
 }
 @media (max-width: 760px) {
   :root { --pb-shadow: 4px 4px 0 var(--pb-shadow-ink); --pb-shadow-lg: 4px 4px 0 var(--pb-shadow-ink); --pb-shadow-mass: 6px 6px 0 var(--pb-shadow-ink); }
+}
+
+/* ---------- Mobile de-chunk tier (≤640px) ----------
+   The restraint pass, applied to phones: thinner party-walls, shallower shadows,
+   tighter air, smaller display type. Identity anchors keep full weight per
+   DESIGN.md: the navy TopBand + wordmark + red square, ONE hero frame per
+   screen, square corners and hard offset shadows everywhere. Token-first (Rule 1);
+   mirrored in TOKENS.css. Desktop and the 641–760 tablet step are untouched. */
+@media (max-width: 640px) {
+  :root {
+    /* borders: 3/4px → 2/3px (interactive edges stay ink; tier-1 already 1px) */
+    --pb-border-w: 2px;
+    --pb-border-w-lg: 3px;
+    /* shadows: one step below the ≤760 tier (4/4/6 → 3/3/4) */
+    --pb-shadow: 3px 3px 0 var(--pb-shadow-ink);
+    --pb-shadow-lg: 3px 3px 0 var(--pb-shadow-ink);
+    --pb-shadow-mass: 4px 4px 0 var(--pb-shadow-ink);
+    /* display type: Tanker heroes step down (44/30/62 → 34/26/44) */
+    --pb-text-2xl: 26px;
+    --pb-text-3xl: 34px;
+    --pb-text-4xl: 44px;
+  }
+
+  /* re-assert tokens over the ≤920 hardcoded shadow values */
+  .pb-rail, .pb-cardbox--frame, .pb-cardbox--mass { box-shadow: var(--pb-shadow); }
+  .pb-distress-score { box-shadow: var(--pb-shadow-mass); }
+
+  /* chrome controls drop to tier-1 shadows; presses still translate (Rule 7) */
+  .pb-themebtn { box-shadow: var(--pb-shadow-tier1); }
+  .pb-themebtn:active, .pb-themebtn--ink:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--pb-shadow-ink); }
+  .pb-btn:active, .pb-btn--primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--pb-shadow-ink); }
+
+  /* TopBand brand cluster: compress, never dilute (Rule 2) */
+  .pb-brandbox { gap: var(--pb-space-3); padding: var(--pb-space-3) var(--pb-space-4); }
+  .pb-mark-square { width: 24px; height: 24px; box-shadow: 2px 2px 0 var(--pb-shadow-ink); }
+  .pb-topactions { padding: var(--pb-space-3) var(--pb-space-4); }
+
+  /* Deep-dive header: two rows (wordmark + actions / full-width address) */
+  .pb-header {
+    padding: var(--pb-space-4) var(--pb-space-5);
+    gap: var(--pb-space-3) var(--pb-space-4);
+    justify-content: space-between;
+  }
+  .pb-header-id { flex: 1 1 100%; order: 3; }
+  .pb-header .pb-topactions { border-left: none; padding: 0; }
+  .pb-mark-boxed { font-size: var(--pb-text-lg); padding: var(--pb-space-2) var(--pb-space-3); box-shadow: var(--pb-shadow-tier1); }
+  .pb-themebtn--ink { padding: 8px 12px; box-shadow: none; }
+  .pb-themebtn--ink:active { transform: none; box-shadow: none; }
+  .pb-address { font-size: var(--pb-text-2xl); }
+  /* Coordinates are locatable via the map/Atlas link; at phone widths they only wrap the subline. */
+  .pb-subaddr-geo { display: none; }
+
+  /* nested chrome collapses one level: within-strip party-walls → hairline (Rule 3) */
+  .pb-metric,
+  .pb-deco-cell {
+    border-right-width: var(--pb-border-w-in);
+    border-bottom-width: var(--pb-border-w-in);
+  }
+
+  /* FilterRail checkboxes de-chunk */
+  .pb-box { width: 16px; height: 16px; border-width: 2px; }
+  .pb-box::after { width: 6px; height: 6px; }
+
+  /* map column: reclaim the 30px gutters; canvas becomes the screen's hero */
+  .pb-maphead,
+  .pb-lensbar { padding-left: var(--pb-space-4); padding-right: var(--pb-space-4); }
+  .pb-map-outer { margin: 0 var(--pb-space-4); }
+  .pb-timestrip-wrap { margin: var(--pb-space-5) var(--pb-space-4) 0; }
+  .pb-maplegend { margin: var(--pb-space-4) var(--pb-space-4) var(--pb-space-7); }
+  .pb-map-outer .pb-mapframe { min-height: 58svh; }
+
+  /* TimeStrip: the "tracking since …" note wraps instead of clipping */
+  .pb-timestrip { flex-wrap: wrap; row-gap: var(--pb-space-2); padding: var(--pb-space-3) var(--pb-space-4); }
+  .pb-timestrip .pb-tnote { white-space: normal; flex: 1 1 100%; }
 }

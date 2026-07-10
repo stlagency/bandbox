@@ -2,6 +2,7 @@
  * Route "/login" — sign in / create account (M7). Server shell + TopBand; the
  * interactive form is the client <LoginForm>. force-dynamic (nothing cacheable).
  */
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { TopBand } from '../../components/TopBand';
 import { LoginForm } from './LoginForm';
@@ -19,7 +20,9 @@ export default function Page() {
     <div className="pb-app">
       <TopBand current="Sign in" />
       <main className="pb-auth-main">
-        <LoginForm />
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
       </main>
     </div>
   );

@@ -17,9 +17,10 @@
  * neighborhood →" CTA are the two sanctioned rail reds.
  */
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { LensMetric, ScanFeature, GeoType, ScanResponse, GeoDetail } from '@bandbox/core/contracts';
 import { TopBand } from '../components/TopBand';
-import { FilterRail } from '../components/FilterRail';
+import { apiFetch } from '../lib/api-client';
 import { LensSwitcher } from '../components/LensSwitcher';
 import { ScanMap } from '../components/ScanMap';
 import { MapLegend } from '../components/MapLegend';
@@ -51,6 +52,9 @@ export function MarketScan() {
   const [timeMeta, setTimeMeta] = useState<TimeMeta | null>(null);
   const [detail, setDetail] = useState<ReturnType<typeof geoDetailToView> | null>(null);
   const [railLoading, setRailLoading] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'signin' | 'error'>('idle');
+  const [features, setFeatures] = useState<ScanFeature[]>([]);
+  const [measureOpen, setMeasureOpen] = useState(false);
 
   // (A) Active-lens period bounds for the TimeStrip; reset the period to latest
   // whenever the lens or geo type changes (bounds are per-lens).
@@ -63,9 +67,13 @@ export function MarketScan() {
         const r = (await res.json()) as ScanResponse;
         if (cancelled) return;
         setTimeMeta({ periods: r.periods, periodMin: r.period_min, metricClass: r.metric_class });
+        setFeatures(r.features ?? []);
         setPeriod(r.period_max || undefined);
       } catch {
-        if (!cancelled) setTimeMeta(null);
+        if (!cancelled) {
+          setTimeMeta(null);
+          setFeatures([]);
+        }
       }
     })();
     return () => {
@@ -100,6 +108,7 @@ export function MarketScan() {
     if (!selected) return;
     let cancelled = false;
     setRailLoading(true);
+    setSaveState('idle');
     (async () => {
       try {
         const res = await fetch(`/api/geo/${selected.geo_type}/${encodeURIComponent(selected.geo_id)}`);
@@ -123,12 +132,71 @@ export function MarketScan() {
       ? formatPeriod(timeMeta.periodMin)
       : undefined;
 
+  // Save-this-area inline state machine (same pattern as DeepDive's saveLead).
+  // Identity + name both come from `selected` (never `detail`) so a click during
+  // railLoading can't pair a new geo_id with the previous geo's name.
+  async function saveArea() {
+    if (!selected || saveState === 'saving' || saveState === 'saved') return;
+    setSaveState('saving');
+    try {
+      const res = await apiFetch('/api/areas', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'canonical',
+          geo_type: selected.geo_type,
+          geo_id: selected.geo_id,
+          name: selected.name,
+        }),
+      });
+      if (res.status === 401) setSaveState('signin');
+      else if (res.ok) setSaveState('saved');
+      else setSaveState('error');
+    } catch {
+      setSaveState('error');
+    }
+  }
+  const areaWord = selected?.geo_type === 'tract' ? 'tract' : 'neighborhood';
+  const saveLabel =
+    saveState === 'saved'
+      ? 'Saved ✓'
+      : saveState === 'saving'
+        ? 'Saving…'
+        : saveState === 'signin'
+          ? 'Sign in to save'
+          : saveState === 'error'
+            ? 'Try again →'
+            : `Save this ${areaWord} →`;
+
   return (
     <div className="pb-app">
       <TopBand current="Market Scan" />
 
       <div className="pb-shell-scan">
-        <FilterRail />
+        {/* Honest scan rail: a read-only echo of the live scan state. The old
+            <FilterRail /> render here was an inert mockup with fabricated counts —
+            real filtering lives on /leads. */}
+        <aside className="pb-filterrail" aria-label="Scan settings">
+          <h2 className="pb-railhead">Scan</h2>
+          <div className="pb-fgroup">
+            <span className="pb-flabel">Active lens</span>
+            <span className="pb-scanfact">{lens}</span>
+          </div>
+          <div className="pb-fgroup">
+            <span className="pb-flabel">Geography</span>
+            <span className="pb-scanfact">{geoType}</span>
+          </div>
+          <div className="pb-fgroup">
+            <span className="pb-flabel">Period</span>
+            <span className="pb-scanfact">{period ? formatPeriod(period) : '—'}</span>
+          </div>
+          <div className="pb-cta-row">
+            <Link href="/leads" className="pb-btn pb-btn--secondary">
+              Filter the full list →
+            </Link>
+          </div>
+          <p className="pb-freshline">Filtering lives on the Leads list.</p>
+        </aside>
 
         <main className="pb-mapcol">
           <div className="pb-maphead">
@@ -136,25 +204,47 @@ export function MarketScan() {
               <p className="pb-kicker">Know the block before you knock.</p>
               <h1>Market Scan</h1>
             </div>
-            <div className="pb-crumbs">
-              <span>City</span> <span>›</span>
-              {GEO_CRUMBS.map((c, i) => (
-                <span key={c.id} style={{ display: 'contents' }}>
-                  <button
-                    type="button"
-                    className={geoType === c.id ? 'pb-crumb-active' : undefined}
-                    aria-pressed={geoType === c.id}
-                    onClick={() => setGeoType(c.id)}
-                  >
-                    {c.label}
-                  </button>
-                  {i < GEO_CRUMBS.length - 1 ? <span>›</span> : null}
-                </span>
-              ))}
-              <span>›</span>
-              <span className="pb-crumb-disabled" title="Parcel view ships with the parcel tile layer">
-                Parcel
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--pb-space-2)' }}>
+              <div className="pb-crumbs">
+                <span>City</span> <span>›</span>
+                {GEO_CRUMBS.map((c, i) => (
+                  <span key={c.id} style={{ display: 'contents' }}>
+                    <button
+                      type="button"
+                      className={geoType === c.id ? 'pb-crumb-active' : undefined}
+                      aria-pressed={geoType === c.id}
+                      onClick={() => setGeoType(c.id)}
+                    >
+                      {c.label}
+                    </button>
+                    {i < GEO_CRUMBS.length - 1 ? <span>›</span> : null}
+                  </span>
+                ))}
+                <span>›</span>
+                <span className="pb-crumb-disabled">Parcel — zoom in to pick one</span>
+              </div>
+              {features.length > 0 ? (
+                <select
+                  className="pb-geoselect"
+                  aria-label={`Select ${geoType}`}
+                  value={selected?.geo_id ?? ''}
+                  onChange={(e) => {
+                    const f = features.find((x) => x.geo_id === e.target.value);
+                    if (f) setSelected(f);
+                  }}
+                >
+                  <option value="" disabled>
+                    Jump to a {geoType}…
+                  </option>
+                  {[...features]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((f) => (
+                      <option key={f.geo_id} value={f.geo_id}>
+                        {f.name}
+                      </option>
+                    ))}
+                </select>
+              ) : null}
             </div>
           </div>
 
@@ -237,19 +327,33 @@ export function MarketScan() {
               <div className="pb-measureline">
                 <span className="pb-lead">{detail.measures.lead}</span>
                 The{' '}
-                <span className="pb-dotted" title={detail.measures.dottedTitle}>
+                <button
+                  type="button"
+                  className="pb-term"
+                  title={detail.measures.dottedTitle}
+                  aria-expanded={measureOpen}
+                  onClick={() => setMeasureOpen((v) => !v)}
+                >
                   {detail.measures.dottedTerm}
-                </span>{' '}
+                </button>{' '}
                 {detail.measures.body} <span className="pb-stamp">{detail.measures.stamp}</span>
+                {measureOpen ? <span className="pb-msr-def">{detail.measures.dottedTitle}</span> : null}
               </div>
 
               <CommunitySignal variant="rail">{detail.communitySignal}</CommunitySignal>
 
               <div className="pb-cta-row">
-                <Button variant="primary">Save this neighborhood →</Button>
-                <Button variant="ghost" noShadow>
-                  Open {detail.parcelCount.toLocaleString('en-US')} parcels
+                <Button variant="primary" onClick={saveArea}>
+                  {saveLabel}
                 </Button>
+                {selected?.geo_type === 'neighborhood' ? (
+                  <Link
+                    className="pb-btn pb-btn--ghost pb-btn--noshadow"
+                    href={`/leads?neighborhood=${encodeURIComponent(selected.name)}`}
+                  >
+                    Open {detail.parcelCount.toLocaleString('en-US')} parcels
+                  </Link>
+                ) : null}
               </div>
 
               <p className="pb-freshline">{detail.freshline}</p>

@@ -120,3 +120,14 @@ The brutalist system above stays the identity; this pass dials back *intensity* 
 3. **Red re-concentrated.** Hard cap 1–2 true-red per screen, signal only. Pulled red OFF: the wordmark `BOX` (→ brick, both themes), the lens-switch active marker (→ blue), the trend highlight bar (→ brick), and danger pills (→ brick edge / bone fill — brick is never a fill, so the fill is bone). Added `.pb-pill--urgent` (true-red fill) as the *only* sanctioned crisis pill, which counts against the budget. Red still owns: the distress score + dominant distress-bar segment + Distress-lens choropleth, the one primary CTA, the active-parcel highlight, the holding-mark square.
 
 Spacing tightened with the shadows gone: group gutter 34→**30px** (`--pb-space-7` runtime / `--pb-space-8` spec), card padding 22→**20px** (`--pb-space-6`). `account.css` is a separate token fork (rounded corners, `--pb-acc-*`) — left isolated; a candidate for a future reconciliation pass. (Note: spec token names in `/TOKENS.css` and runtime names in `globals.css` differ for the gutter — see [`docs/DESIGN_OPTIMIZATION.md`](../docs/DESIGN_OPTIMIZATION.md).)
+
+---
+
+## Mobile de-chunk tier (2026-07-09) — "the survey table folds up"
+Aaron: the brand read "chunky and blockish" on phones. Same identity, less mass at `≤640px`, applied token-first (one `@media` block in `components.css` + spacing in `globals.css`, mirrored in `/TOKENS.css`):
+- **Borders** 3/4px → **2/3px**; **shadows** step 4/4/6 → **3/3/4** (mass) — square corners + hard offsets stay (they are the system).
+- **Display type** steps down: `--pb-text-2xl/3xl/4xl` → **26/34/44px**. Space Mono data treatment untouched.
+- **Spacing**: card padding 20→**16px**, group gutter 30→**18px**, section air 48→**28px**.
+- **One hero frame per screen** (map on scan; distress hero on the deep-dive); nested metric/deco party-walls drop to the 1px within-card hairline; chrome controls (theme toggle, checkboxes) drop shadows / thin edges (interactive edges stay INK).
+- **Mobile IA**: map-first stacking order (rails follow the product); nav restored at ≤760px as a full-width scrollable row (was `display:none` — Leads was unreachable); deep-dive header compresses to two rows, coordinates (now 5dp) hide at phone widths; lenses collapse to a 2×2 grid ≤560px; the TimeStrip note wraps.
+- **Unchanged at every viewport** (non-negotiables): navy TopBand + stacked BAND/BOX wordmark + red holding square, radius-0, no blur/soft shadows, full four-side borders, the red budget, no modals/drawers.

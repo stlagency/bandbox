@@ -134,3 +134,24 @@ html[data-theme="dark"] {
 .pb-pill--aged    { background: var(--pb-surface); color: var(--pb-brick); border-color: var(--pb-brick); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- Mobile de-chunk tier (≤640px) ----------
+   Spec mirror of the runtime overrides (borders/shadows: components.css;
+   spacing: globals.css — NOTE globals names the 30px gutter --pb-space-7 and
+   48px section air --pb-space-8; this file's names differ, values below use
+   THIS file's naming). Identity anchors keep full weight per DESIGN.md. */
+@media (max-width: 640px) {
+  :root {
+    --pb-border-w: 2px;
+    --pb-border-w-lg: 3px;
+    --pb-shadow:      3px 3px 0 var(--pb-ink);
+    --pb-shadow-lg:   3px 3px 0 var(--pb-ink);
+    --pb-shadow-mass: 4px 4px 0 var(--pb-ink);
+    --pb-text-2xl: 26px;
+    --pb-text-3xl: 34px;
+    --pb-text-4xl: 44px;
+    --pb-space-6: 16px; /* card padding */
+    --pb-space-8: 18px; /* group gutter (runtime globals.css names this --pb-space-7) */
+    --pb-space-9: 28px; /* section air */
+  }
+}

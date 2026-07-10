@@ -16,10 +16,11 @@ export interface NavItem {
 }
 
 const DEFAULT_NAV: NavItem[] = [
+  // Map + leads are the two real parcel entry points. The old "Parcels" item
+  // deep-linked ONE hardcoded parcel and "Learn" pointed at "/" — both dead
+  // weight; re-add Learn only when a /learn route exists.
   { label: 'Market Scan', href: '/' },
-  { label: 'Parcels', href: '/parcel/312015400' },
   { label: 'Leads', href: '/leads' },
-  { label: 'Learn', href: '/' },
 ];
 
 export interface TopBandProps {

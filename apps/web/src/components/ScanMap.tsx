@@ -152,6 +152,11 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
     map.on('load', () => {
       mapRef.current = map;
       map.resize(); // container may have sized after init
+      // Re-fit after the post-layout resize: if the container was still tiny at
+      // construction, the constructor's bounds-fit fails ("Map cannot fit within
+      // canvas") and the camera strands on an empty default — exactly what the
+      // RESET control recovers from. Idempotent when the initial fit succeeded.
+      map.fitBounds(PHILLY_BOUNDS, { padding: 24, animate: false });
       setReady(true);
     });
     // Keep the GL canvas matched to the (aspect-ratio) container as it lays out.
@@ -273,6 +278,9 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
       url: `pmtiles://${TILES_BASE}/parcels.pmtiles`,
       promoteId: 'parcel_pk',
     });
+    // Touch devices get larger dots (with a stroke bump so overlapping rowhouse
+    // centroids stay legible) — a ~3px target is un-tappable. Desktop unchanged.
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
     map.addLayer({
       id: 'parcels-circle',
       type: 'circle',
@@ -280,11 +288,15 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
       'source-layer': PARCEL_SOURCE_LAYER,
       minzoom: 14,
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 1.3, 16, 3, 18, 5],
+        'circle-radius': coarse
+          ? ['interpolate', ['linear'], ['zoom'], 14, 2, 16, 4, 18, 7, 20, 14]
+          : ['interpolate', ['linear'], ['zoom'], 14, 1.3, 16, 3, 18, 5],
         'circle-color': DRAFT_LINE,
         'circle-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 1, 0.7],
         'circle-stroke-color': DRAFT_BG,
-        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 14, 0, 16, 0.6],
+        'circle-stroke-width': coarse
+          ? ['interpolate', ['linear'], ['zoom'], 14, 0, 16, 0.8, 20, 1.4]
+          : ['interpolate', ['linear'], ['zoom'], 14, 0, 16, 0.6],
       },
     });
     wireParcelInteractions(map);
@@ -341,6 +353,17 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
       {status === 'error' ? (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: DRAFT_LINE, fontFamily: 'var(--pb-font-mono)', fontSize: 12 }}>
           map data unavailable
+        </div>
+      ) : null}
+      {status === 'loading' ? (
+        /* pointerEvents:none keeps the zoom/Reset controls usable while data is in
+           flight; status flips to 'ready' only after the first successful paint,
+           so this never flashes on lens/period switches. */
+        <div
+          aria-hidden="true"
+          style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: DRAFT_LINE, fontFamily: 'var(--pb-font-mono)', fontSize: 12, pointerEvents: 'none' }}
+        >
+          reading the survey…
         </div>
       ) : null}
     </div>

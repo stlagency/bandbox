@@ -11,6 +11,7 @@
  * the actions slot is left open for that integration to wire in.
  */
 import Link from 'next/link';
+import { useState } from 'react';
 import type { LeadRow } from '@bandbox/core/contracts';
 import { Pill } from './Pill';
 import { SkipTraceButton } from './SkipTraceButton';
@@ -18,7 +19,40 @@ import { SkipTraceButton } from './SkipTraceButton';
 export interface LeadsTableProps {
   rows: LeadRow[];
   /** Called with the parcel_pk when the row's Save button is activated. */
-  onSave?: (parcelPk: string) => void;
+  onSave?: (parcelPk: string) => Promise<'saved' | 'signin' | 'error'>;
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'signin' | 'error';
+
+/** Per-row Save with inline outcome, mirroring SkipTraceButton beside it. */
+function RowSave({
+  parcelPk,
+  onSave,
+}: {
+  parcelPk: string;
+  onSave: (parcelPk: string) => Promise<'saved' | 'signin' | 'error'>;
+}) {
+  const [state, setState] = useState<SaveState>('idle');
+  if (state === 'signin') {
+    return (
+      <Link className="pb-leads-save" href="/login?next=/leads">
+        Sign in
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="pb-leads-save"
+      onClick={async () => {
+        if (state === 'saving' || state === 'saved') return;
+        setState('saving');
+        setState(await onSave(parcelPk));
+      }}
+    >
+      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : state === 'error' ? 'Retry' : 'Save'}
+    </button>
+  );
 }
 
 export function LeadsTable({ rows, onSave }: LeadsTableProps) {
@@ -90,13 +124,7 @@ export function LeadsTable({ rows, onSave }: LeadsTableProps) {
               <td className="pb-leads-actcol">
                 {/* Per-row actions: Save to the mini-CRM + BYO skip-trace reveal. */}
                 <div className="pb-leads-rowactions">
-                  <button
-                    type="button"
-                    className="pb-leads-save"
-                    onClick={() => onSave?.(row.parcel_pk)}
-                  >
-                    Save
-                  </button>
+                  {onSave ? <RowSave parcelPk={row.parcel_pk} onSave={onSave} /> : null}
                   <SkipTraceButton parcelPk={row.parcel_pk} />
                 </div>
               </td>

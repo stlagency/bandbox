@@ -17,11 +17,18 @@ export const metadata: Metadata = {
   description: 'Scored, filterable distress leads with honest per-signal counts and CSV export.',
 };
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ neighborhood?: string }>;
+}) {
+  // Next 15: searchParams is a Promise; a server-side read avoids the
+  // useSearchParams Suspense requirement in the client view.
+  const { neighborhood } = await searchParams;
   return (
     <div className="pb-app">
       <TopBand current="Leads" />
-      <LeadsView />
+      <LeadsView initialNeighborhood={neighborhood ?? ''} />
     </div>
   );
 }
