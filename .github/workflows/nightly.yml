@@ -71,6 +71,13 @@ jobs:
       PUBLIC_BASE_URL: 'https://www.bandbox.pro'
       # Bid4Assets enrichment is OFF by default in the public repo (PRD §4.2).
       ENABLE_BID4ASSETS_ENRICHMENT: 'false'
+      # Per-run Carto page budget. A healthy DAILY delta is <1 page (10k rows)
+      # per source; 5 pages (50k rows) only binds after a multi-day outage,
+      # where cursor-resume drains the backlog across successive nights. The
+      # cap exists because CI promote throughput to the pooler measured ~75×
+      # slower than local (Jul 2026: one 40-page/400k-row backlog batch = 800
+      # chunk statements = 2.5h of silence → the 150-min kill, every night).
+      NIGHTLY_MAX_PAGES: '5'
 
     steps:
       - name: Checkout
