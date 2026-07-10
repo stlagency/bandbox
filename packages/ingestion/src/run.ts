@@ -142,6 +142,32 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
   let parcelIndex: ParcelKeyIndex = await loadParcelKeyIndex(db);
   const reports: SourceRunReport[] = [];
 
+  // Per-source wall-clock budget — the guard NO hang class can evade. The Jul
+  // 2026 outage sat inside a single source's first HTTP fetch for hours without
+  // the AbortController rejection ever surfacing (GitHub-runner→Carto path);
+  // server-side statement_timeout only bounds DB statements. On breach the
+  // source rejects into the per-source catch ('failed' + alert) and the run
+  // CONTINUES — gate ≠ halt, and finalize/tiles/alerts still execute. The
+  // abandoned promise may leak a socket; it holds no DB statement (2-min
+  // server cap), so the shared max:1 connection stays usable.
+  const sourceBudgetMs = process.env.NIGHTLY_SOURCE_BUDGET_MS
+    ? Number(process.env.NIGHTLY_SOURCE_BUDGET_MS)
+    : 20 * 60_000;
+  const withBudget = async <T>(label: string, work: Promise<T>): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    const breach = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`source budget exceeded (${sourceBudgetMs}ms) — ${label}`)),
+        sourceBudgetMs,
+      );
+    });
+    try {
+      return await Promise.race([work, breach]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   for (const spec of philadelphia.sources) {
     const fetcher = deps.fetchers[spec.name];
     const steps = deps.stepsBySource[spec.name];
@@ -154,7 +180,7 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
     const t0 = Date.now();
     const runId = await openIngestRun(db, spec.name);
     try {
-      const batch = await fetcher(spec, db);
+      const batch = await withBudget(`${spec.name} fetch`, fetcher(spec, db));
 
       if (isSpine(spec)) {
         const report = await runSpineSource(db, spec, batch, steps, deps.hooks, runId);

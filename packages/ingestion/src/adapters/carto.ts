@@ -179,7 +179,12 @@ export async function* iterateCartoPages<Row = Record<string, unknown>>(
   let pages = 0;
   for (;;) {
     if (opts.maxPages !== undefined && pages >= opts.maxPages) return;
+    // Per-page progress: the Jul 2026 CI hang sat INSIDE the first page fetch
+    // with zero output — this line localizes any future stall to source+page.
+    const t0 = Date.now();
+    console.log(`[carto] ${opts.table}: page ${pages + 1} (cursor ${cursor ?? 'start'})…`);
     const page = await fetchCartoPage<Row>({ ...opts, cursor });
+    console.log(`[carto] ${opts.table}: page ${pages + 1} → ${page.rows.length} rows in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     pages += 1;
     if (page.rows.length === 0) return;
     yield page;
