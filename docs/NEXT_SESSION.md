@@ -1,11 +1,18 @@
 # Bandbox — resume here (next session)
 
-> **✅ 2026-07-09 — OUTAGE FIXED + MOBILE/UX PASS SHIPPED (commits `8c70c54`, `936afb0`, both live).**
+> **✅ 2026-07-09/10 — OUTAGE ROOT-CAUSED + FIXED + MOBILE/UX PASS SHIPPED (commits `8c70c54`,
+> `936afb0`, `d947890`, `d001bff` — all live).**
 > (1) **The nightly had been dead ~3 weeks** (every scheduled run since ~Jun 19 hung silently to the 6h
-> Actions kill; matviews/tiles/alert digests never ran). Root causes fixed: worker DB connection now sets
-> `statement_timeout`/`lock_timeout`/`idle_in_transaction` (db.ts); the 303MB OPA body stream has an idle
-> stall-watchdog (`withStallGuard`); per-source start/done logging; nonzero exit on partial failure;
-> `nightly.yml` cap 360→150min + `/fail` ping on `cancelled()` + keep-alive stamps `run_started_at`.
+> Actions kill; matviews/tiles/alert digests never ran). **Final root cause (proven with per-page logs,
+> run 29069497277):** NOT a network hang — Carto fetches 400k rows in 34s from CI — but **CI→pooler
+> promote throughput**: 800 chunked upsert statements at ~10s each from runners (~75× slower than local)
+> = 2.5h inside ONE source's promote; each cancelled night re-attempted the same giant backlog without
+> advancing the cursor. Fixes: `NIGHTLY_MAX_PAGES=5` in nightly.yml (bounded batches; cursor-resume
+> drains backlogs across nights), `[promote]`/`[carto]`/`[worker]` progress logging, per-source fetch
+> budget (`NIGHTLY_SOURCE_BUDGET_MS`, 20min), OPA body stall-watchdog, nonzero exit on partial failure,
+> cap 360→150min + `/fail` on `cancelled()`. NOTE: db.ts `connection:{}` timeouts do NOT survive the
+> transaction pooler (server default `statement_timeout=2min` applies). **Backlog drained locally
+> 2026-07-10** so CI resumes with normal 1-page deltas.
 > **⚠️ STILL NEEDS AARON: create a healthchecks.io check + set the `HEALTHCHECKS_URL` repo secret** —
 > the dead-man's-switch is wired but unarmed, which is why 3 weeks went unnoticed.
 > (2) **P0 prod bug fixed:** skip-trace / save-lead / CSV export were 401 for every signed-in user (raw
