@@ -3,16 +3,19 @@
 > **✅ 2026-07-09/10 — OUTAGE ROOT-CAUSED + FIXED + MOBILE/UX PASS SHIPPED (commits `8c70c54`,
 > `936afb0`, `d947890`, `d001bff` — all live).**
 > (1) **The nightly had been dead ~3 weeks** (every scheduled run since ~Jun 19 hung silently to the 6h
-> Actions kill; matviews/tiles/alert digests never ran). **Final root cause (proven with per-page logs,
-> run 29069497277):** NOT a network hang — Carto fetches 400k rows in 34s from CI — but **CI→pooler
-> promote throughput**: 800 chunked upsert statements at ~10s each from runners (~75× slower than local)
-> = 2.5h inside ONE source's promote; each cancelled night re-attempted the same giant backlog without
-> advancing the cursor. Fixes: `NIGHTLY_MAX_PAGES=5` in nightly.yml (bounded batches; cursor-resume
-> drains backlogs across nights), `[promote]`/`[carto]`/`[worker]` progress logging, per-source fetch
-> budget (`NIGHTLY_SOURCE_BUDGET_MS`, 20min), OPA body stall-watchdog, nonzero exit on partial failure,
-> cap 360→150min + `/fail` on `cancelled()`. NOTE: db.ts `connection:{}` timeouts do NOT survive the
-> transaction pooler (server default `statement_timeout=2min` applies). **Backlog drained locally
-> 2026-07-10** so CI resumes with normal 1-page deltas.
+> Actions kill; matviews/tiles/alert digests never ran). **DEFINITIVE root cause (commit `ba33563`,
+> proven with a reproduced error + stack sample + regression test):** `persistQuarantine` bound 4 params
+> × every quarantined row in ONE statement; a backlog-sized batch quarantines >16,384 malformed keys →
+> >65,534 params → postgres.js `MAX_PARAMETERS_EXCEEDED` thrown in the socket-write path **stranded the
+> query promise forever** (0% CPU, idle DB, no timers). Daily batches stay under the ceiling — only
+> backlog runs died, and each cancel grew the next night's batch (the death spiral). Fixes:
+> persistQuarantine chunked (500 rows) + test; client `idle_timeout=20`/`max_lifetime`/`connect_timeout`
+> in db.ts (turns this hang class into a fast visible failure); `NIGHTLY_MAX_PAGES=5` in nightly.yml;
+> `[worker]`/`[carto]`/`[promote]` progress logging; per-source fetch budget; OPA stall-watchdog;
+> nonzero exit on partial failure; cap 360→150min + `/fail` on `cancelled()`. NOTE: db.ts
+> `connection:{}` GUCs do NOT survive the transaction pooler (server `statement_timeout=2min` applies).
+> **Backlog drained locally 2026-07-10** (5M+ rows re-promoted, matviews/geo_metric refreshed) so CI
+> resumes with normal 1-page deltas.
 > **⚠️ STILL NEEDS AARON: create a healthchecks.io check + set the `HEALTHCHECKS_URL` repo secret** —
 > the dead-man's-switch is wired but unarmed, which is why 3 weeks went unnoticed.
 > (2) **P0 prod bug fixed:** skip-trace / save-lead / CSV export were 401 for every signed-in user (raw
