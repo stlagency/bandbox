@@ -11,7 +11,7 @@ A nightly-ingested warehouse of Philadelphia public records (OPA assessments, RT
 
 - a **market scan** — multi-resolution ZIP → neighborhood → tract → parcel blueprint map, four lenses (price & value, development momentum, distress & risk, livability);
 - a **property deep-dive** — assessment vs. sale, full transfer history, open L&I, taxes, nearby crime/311, arms-length comps + a transparent rule-based value estimate, and a fully decomposable distress score;
-- **leads + a mini-CRM**, saved areas, alerts (nightly email digest), and BYO-key skip-trace orchestration — **login-gated but free** (monetization is deferred to M8; a low-flat-subscription seam is built and dormant). **No data is paywalled — only personalization/automation.**
+- **leads + a mini-CRM**, saved areas, alerts (nightly email digest), and BYO-key skip-trace orchestration — login-gated; a low-flat Stripe subscription ($2/mo · $20/yr) is built and armed by the `BILLING_ENABLED` flag. **No data is paywalled — only personalization/automation.**
 
 No black boxes: no ML AVM, every derived number decomposes to its public record.
 
@@ -42,7 +42,7 @@ Philadelphia lives behind a `CityAdapter` seam (`packages/core/src/adapters/`); 
 
 ## Status
 
-Building M0 → M7 per [`PRD.md`](PRD.md) §9. See [`STATUS.md`](STATUS.md).
+**Live in production at [www.bandbox.pro](https://www.bandbox.pro) — M0–M8 shipped** (ingestion, derived analytics, map + deep-dive, leads/CRM/export/skip-trace, accounts + alerts, Stripe billing behind a dormant `BILLING_ENABLED` flag). Current state + resume point: [`docs/NEXT_SESSION.md`](docs/NEXT_SESSION.md).
 
 ## License
 

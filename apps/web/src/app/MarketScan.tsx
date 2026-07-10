@@ -58,7 +58,9 @@ export function MarketScan() {
     let cancelled = false;
     (async () => {
       try {
-        const r = (await (await fetch(`/api/scan?geo=${geoType}&lens=${lens}`)).json()) as ScanResponse;
+        const res = await fetch(`/api/scan?geo=${geoType}&lens=${lens}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const r = (await res.json()) as ScanResponse;
         if (cancelled) return;
         setTimeMeta({ periods: r.periods, periodMin: r.period_min, metricClass: r.metric_class });
         setPeriod(r.period_max || undefined);
@@ -77,7 +79,9 @@ export function MarketScan() {
     let cancelled = false;
     (async () => {
       try {
-        const r = (await (await fetch(`/api/scan?geo=${geoType}&lens=distress`)).json()) as ScanResponse;
+        const res = await fetch(`/api/scan?geo=${geoType}&lens=distress`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const r = (await res.json()) as ScanResponse;
         if (cancelled || !r.features?.length) return;
         const top = r.features.reduce((a, b) => ((b.value ?? -Infinity) > (a.value ?? -Infinity) ? b : a));
         setSelected(top);
@@ -98,9 +102,9 @@ export function MarketScan() {
     setRailLoading(true);
     (async () => {
       try {
-        const d = (await (
-          await fetch(`/api/geo/${selected.geo_type}/${encodeURIComponent(selected.geo_id)}`)
-        ).json()) as GeoDetail;
+        const res = await fetch(`/api/geo/${selected.geo_type}/${encodeURIComponent(selected.geo_id)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = (await res.json()) as GeoDetail;
         if (cancelled) return;
         if (d && !(d as unknown as { error?: string }).error) setDetail(geoDetailToView(d));
       } catch {

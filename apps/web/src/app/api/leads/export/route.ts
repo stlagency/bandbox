@@ -66,24 +66,15 @@ export async function GET(req: Request): Promise<Response> {
     'key_signals',
   ];
 
-  // Pre-resolve whether each capped row was actually emitted, so we can stamp
-  // X-Row-Cap only when the underlying set exceeds the cap (one cheap probe).
-  const probe = await sql<{ n: string }[]>`
-    select count(*)::text as n from (
-      select 1
-      from public.distress_signal ds
-      join public.parcel p on p.parcel_pk = ds.parcel_pk
-      where ${where}
-      limit ${ROW_CAP + 1}
-    ) t`;
-  const truncated = Number(probe[0]?.n ?? '0') > ROW_CAP;
-
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(csvRow(header) + '\r\n'));
 
+        // Fetch ONE row past the cap: seeing it proves truncation without the
+        // separate blocking COUNT probe this route used to run (~2.4s of pure
+        // overhead before the first byte, to stamp a header nothing read).
         const cursor = sql<LeadsExportRow[]>`
           select
             ds.*,
@@ -94,12 +85,26 @@ export async function GET(req: Request): Promise<Response> {
           join public.parcel p on p.parcel_pk = ds.parcel_pk
           where ${where}
           order by ds.score01 desc, ds.parcel_pk
-          limit ${ROW_CAP}`.cursor(500);
+          limit ${ROW_CAP + 1}`.cursor(500);
 
-        for await (const batch of cursor) {
+        let emitted = 0;
+        let truncated = false;
+        outer: for await (const batch of cursor) {
           for (const row of batch) {
+            if (emitted >= ROW_CAP) {
+              truncated = true;
+              break outer;
+            }
             controller.enqueue(encoder.encode(csvRow(toCells(row)) + '\r\n'));
+            emitted += 1;
           }
+        }
+        if (truncated) {
+          // In-band marker (headers were sent before the body started). Rows are
+          // score-ordered, so "first N" is the meaningful cut.
+          controller.enqueue(
+            encoder.encode(`# truncated: first ${ROW_CAP} rows by distress score; refine filters for the rest\r\n`),
+          );
         }
         controller.close();
       } catch (err) {
@@ -113,7 +118,6 @@ export async function GET(req: Request): Promise<Response> {
     'content-disposition': 'attachment; filename="leads-export.csv"',
     'cache-control': 'no-store',
   };
-  if (truncated) headers['x-row-cap'] = String(ROW_CAP);
 
   return new Response(stream, { headers });
 }

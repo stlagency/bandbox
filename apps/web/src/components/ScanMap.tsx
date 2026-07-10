@@ -171,7 +171,9 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
     let cancelled = false;
     (async () => {
       try {
-        const fc = (await (await fetch(`/api/boundaries?geo=${geoType}`)).json()) as FeatureCollection;
+        const bres = await fetch(`/api/boundaries?geo=${geoType}`);
+        if (!bres.ok) throw new Error(`HTTP ${bres.status}`);
+        const fc = (await bres.json()) as FeatureCollection;
         if (cancelled) return;
         boundaryRef.current = { geoType, fc };
         setDataVersion((v) => v + 1);
@@ -202,7 +204,9 @@ export function ScanMap({ lens, geoType = 'neighborhood', period, onSelect }: Sc
     let scanByGeo = new Map<string, ScanFeature>();
     try {
       const periodQ = period ? `&period=${encodeURIComponent(period)}` : '';
-      const scan = await (await fetch(`/api/scan?geo=${geoType}&lens=${lens}${periodQ}`)).json();
+      const sres = await fetch(`/api/scan?geo=${geoType}&lens=${lens}${periodQ}`);
+      if (!sres.ok) throw new Error(`HTTP ${sres.status}`);
+      const scan = await sres.json();
       scanByGeo = new Map((scan.features as ScanFeature[]).map((f) => [f.geo_id, f]));
     } catch {
       setStatus('error');

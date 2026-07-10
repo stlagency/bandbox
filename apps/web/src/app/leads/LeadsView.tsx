@@ -14,6 +14,7 @@ import type { LeadRow, LeadsResponse, LeadFacets } from '@bandbox/core/contracts
 import { FilterRail, type FilterRailValue } from '../../components/FilterRail';
 import { LeadsTable } from '../../components/LeadsTable';
 import { Button } from '../../components/Button';
+import { apiFetch } from '../../lib/api-client';
 
 const PAGE_SIZE = 50;
 
@@ -48,7 +49,9 @@ export function LeadsView() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
 
   // A stable serialization of the filter, so the debounced effect only refires on
   // a real change (Set identity would otherwise refire every render).
@@ -67,18 +70,26 @@ export function LeadsView() {
       const facetParams = new URLSearchParams(filterKey);
       facetParams.set('facets', '1');
 
+      // A 500's error body is still valid JSON — without the res.ok guard the
+      // .catch below never fires and a DB outage masquerades as an empty result.
+      const okJson = <T,>(r: Response): Promise<T> => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<T>;
+      };
       Promise.all([
-        fetch(`/api/leads?${params.toString()}`).then((r) => r.json() as Promise<LeadsResponse>),
-        fetch(`/api/leads?${facetParams.toString()}`).then((r) => r.json() as Promise<LeadFacets>),
+        fetch(`/api/leads?${params.toString()}`).then((r) => okJson<LeadsResponse>(r)),
+        fetch(`/api/leads?${facetParams.toString()}`).then((r) => okJson<LeadFacets>(r)),
       ])
         .then(([list, fac]) => {
           if (id !== reqId.current) return; // a newer request won
+          setLoadError(false);
           setRows(list.rows ?? []);
           setTotal(list.total ?? 0);
           setFacets(fac ?? null);
         })
         .catch(() => {
           if (id !== reqId.current) return;
+          setLoadError(true);
           setRows([]);
           setTotal(0);
           setFacets(null);
@@ -88,7 +99,7 @@ export function LeadsView() {
         });
     }, 250);
     return () => clearTimeout(handle);
-  }, [filterKey]);
+  }, [filterKey, retryTick]);
 
   const loadMore = useCallback(() => {
     const next = page + 1;
@@ -102,7 +113,10 @@ export function LeadsView() {
     params.set('page', String(next));
     params.set('page_size', String(PAGE_SIZE));
     fetch(`/api/leads?${params.toString()}`)
-      .then((r) => r.json() as Promise<LeadsResponse>)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<LeadsResponse>;
+      })
       .then((list) => {
         if (id !== reqId.current) return; // a filter change superseded this load
         setRows((prev) => [...prev, ...(list.rows ?? [])]);
@@ -117,7 +131,8 @@ export function LeadsView() {
   const onExport = useCallback(async () => {
     setExportMsg(null);
     try {
-      const res = await fetch(`/api/leads/export?${filterKey}`);
+      // Gated route (requirePaid) — apiFetch attaches the Bearer token.
+      const res = await apiFetch(`/api/leads/export?${filterKey}`);
       if (res.status === 401 || res.status === 403) {
         setExportMsg('Sign in to export');
         return;
@@ -144,7 +159,7 @@ export function LeadsView() {
     // The mini-CRM save endpoint is owned by another stream; we call its frozen
     // shape (POST /api/leads/save { parcel_pk }). Failures are non-fatal here.
     try {
-      await fetch('/api/leads/save', {
+      await apiFetch('/api/leads/save', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ parcel_pk: parcelPk }),
@@ -190,7 +205,16 @@ export function LeadsView() {
 
         <div className="pb-leads-tablewrap" aria-busy={loading}>
           {rows.length === 0 && !loading ? (
-            <p className="pb-leads-empty">No leads match these filters.</p>
+            loadError ? (
+              <p className="pb-leads-empty">
+                Couldn’t load leads —{' '}
+                <button type="button" className="pb-leads-retry" onClick={() => setRetryTick((t) => t + 1)}>
+                  Retry
+                </button>
+              </p>
+            ) : (
+              <p className="pb-leads-empty">No leads match these filters.</p>
+            )
           ) : (
             <LeadsTable rows={rows} onSave={onSave} />
           )}

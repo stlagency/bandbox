@@ -41,6 +41,16 @@ export interface DbClient {
  * `if not exists` DDL don't spam logs. `prepare: false` is REQUIRED for Supabase's
  * transaction pooler (port 6543, which doesn't support session-level prepared
  * statements); `ssl: 'require'` because the pooler mandates TLS. Caller owns `end()`.
+ *
+ * The `connection` block sets server-side time bounds (sent as startup params, so
+ * they survive the transaction pooler — all three are USERSET GUCs). With `max: 1`
+ * a single stuck statement blocks the ENTIRE nightly: before these bounds existed,
+ * one stall hung the worker to GitHub Actions' 6h kill with zero output (the
+ * Jun–Jul 2026 outage). `statement_timeout` is generous (15 min) because the
+ * geo-stamp full-table `ST_Contains` UPDATE and the CONCURRENT matview refreshes
+ * over 583K rows are legitimately heavy; the point is fail-fast-and-alert, not
+ * a tight budget. A timeout rejects into the per-source catch (gate ≠ halt), so
+ * the run still reaches finalize/tiles/alerts.
  */
 export function connectFromEnv(): Sql {
   return postgres(databaseUrlFromEnv(), {
@@ -48,6 +58,11 @@ export function connectFromEnv(): Sql {
     prepare: false,
     ssl: 'require',
     onnotice: () => {},
+    connection: {
+      statement_timeout: 900_000, // 15 min per statement
+      lock_timeout: 30_000, // 30 s waiting on a lock
+      idle_in_transaction_session_timeout: 120_000, // 2 min idle inside a tx
+    },
   });
 }
 

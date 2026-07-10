@@ -12,7 +12,8 @@
 # (~04:17–05:17 ET depending on DST) so the upstream refresh has settled. The :17
 # offset avoids the top-of-hour cron stampede on GitHub's shared schedulers.
 #
-# The job is resumable (ops.source_cursor, PRD §4.1) and capped at 6h.
+# The job is resumable (ops.source_cursor, PRD §4.1) and capped at 2.5h (the
+# worker's own statement/stall timeouts fail a hang long before the cap).
 
 name: Nightly ingestion
 
@@ -41,8 +42,12 @@ jobs:
   ingest:
     name: Ingest → keep-alive → liveness ping
     runs-on: ubuntu-latest
-    # 6h cap (PRD §4.1). A backfill that dies mid-run resumes from ops.source_cursor.
-    timeout-minutes: 360
+    # 2.5h cap. A healthy nightly delta takes well under an hour (incl. tiles);
+    # the worker now has server-side statement/lock timeouts + an OPA body stall
+    # watchdog, so a hang fails FAST instead of burning the old 6h cap (which the
+    # Jun–Jul 2026 outage hit every night, cancelled+silent, for ~3 weeks). A run
+    # that dies mid-way resumes from ops.source_cursor.
+    timeout-minutes: 150
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -110,7 +115,9 @@ jobs:
       - name: Keep-alive — update heartbeat
         if: ${{ always() }}
         env:
-          KEEPALIVE_TS: ${{ github.event.repository.updated_at }}
+          # The RUN's own start time (ISO-8601). Was `github.event.repository.updated_at`,
+          # which is the PREVIOUS push's time — every heartbeat read ~24h stale.
+          KEEPALIVE_TS: ${{ github.run_started_at }}
           KEEPALIVE_RUN_ID: ${{ github.run_id }}
           KEEPALIVE_SHA: ${{ github.sha }}
           KEEPALIVE_WORKFLOW: nightly
@@ -144,4 +151,12 @@ jobs:
 
       - name: Liveness — signal failure
         if: ${{ failure() && env.HEALTHCHECKS_URL != '' }}
+        run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_URL}/fail" || true
+
+      # A TIMED-OUT job is `cancelled`, which triggers neither success() nor
+      # failure() — exactly the failure mode of the 2026 outage. Ping /fail
+      # explicitly so a timeout alerts immediately instead of waiting out the
+      # monitor's grace window.
+      - name: Liveness — signal timeout/cancellation
+        if: ${{ cancelled() && env.HEALTHCHECKS_URL != '' }}
         run: curl -fsS --retry 3 --max-time 20 "${HEALTHCHECKS_URL}/fail" || true

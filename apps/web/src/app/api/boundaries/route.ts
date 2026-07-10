@@ -24,5 +24,11 @@ export async function GET(req: Request): Promise<Response> {
     properties: { geo_id: r.geo_id, geo_type: geo, name: r.name ?? r.geo_id },
     geometry: JSON.parse(r.geom),
   }));
-  return NextResponse.json({ type: 'FeatureCollection', features });
+  // Boundary geometry is static within a deploy cycle (it only changes when a
+  // geo source reloads). Long CDN TTL; SWR keeps repeats instant. Anon route —
+  // no per-user data. (`force-dynamic` governs rendering, not this header.)
+  return NextResponse.json(
+    { type: 'FeatureCollection', features },
+    { headers: { 'cache-control': 'public, s-maxage=86400, stale-while-revalidate=604800' } },
+  );
 }

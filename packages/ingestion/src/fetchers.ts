@@ -20,10 +20,12 @@ import type { SourceFetcher } from './run.js';
 import { iterateCartoPages, type FetchLike } from './adapters/carto.js';
 import { readSourceCursor } from './ingestRun.js';
 import {
+  DEFAULT_OPA_STALL_MS,
   evaluateOpaFreshness,
   evaluateOpaRowCount,
   fetchOpaHttp,
   streamOpaRows,
+  withStallGuard,
   type OpaHttp,
 } from './adapters/opaBulk.js';
 
@@ -86,6 +88,8 @@ export function makeCartoFetcher(opts: CartoFetchOptions = {}): SourceFetcher {
 export interface OpaFetchOptions {
   /** Injected HTTP transport (defaults to fetchOpaHttp()). */
   http?: OpaHttp;
+  /** Idle (per-chunk) stall budget for the body transfer (default 120 s). */
+  stallMs?: number;
 }
 
 /**
@@ -113,7 +117,16 @@ export function makeOpaFetcher(opts: OpaFetchOptions = {}): SourceFetcher {
 
     const stream = await http.getStream(spec.endpoint);
     const rows: Record<string, unknown>[] = [];
-    for await (const rec of streamOpaRows(stream)) rows.push(rec);
+    // Idle watchdog on the BODY phase: fetchOpaHttp's AbortController guards
+    // connect/TTFB only, so a mid-body S3 stall would otherwise await forever
+    // (OPA is sources[0] — every keyed source queues behind it). On stall the
+    // stream is destroyed and the throw lands in the per-source catch
+    // (recorded `failed` + alerted; the nightly continues).
+    const stallMs = opts.stallMs ?? DEFAULT_OPA_STALL_MS;
+    const guarded = withStallGuard(streamOpaRows(stream), stallMs, () =>
+      stream.destroy(new Error(`OPA body stalled — no data for ${stallMs}ms`)),
+    );
+    for await (const rec of guarded) rows.push(rec);
 
     const rowCount = evaluateOpaRowCount(rows.length);
     if (!rowCount.ok) {

@@ -15,8 +15,9 @@
 > `memory/cloudflare-dns-token.secret`).
 > **✅ ZeptoMail LIVE** — digests send from `noreply@bandbox.pro` (tracked); GH secrets set.
 > **✅ M7 + M8 SHIPPED 2026-06-20** (PRs `#2`/`#3`): auth + saved areas + alert digests; Stripe checkout/webhook/portal
-> with a reversible `BILLING_ENABLED` paywall. **Operational follow-ups only** (see Human pause-points): rotate the
-> Stripe secret key, confirm the $45/mo price, do a real test-subscribe, then flip `BILLING_ENABLED=true`.
+> with a reversible `BILLING_ENABLED` paywall. **Operational follow-ups only** — the billing-revision go-list
+> (PR `#5`: **$2/mo + $20/yr**; key rotation is a NON-ISSUE per Aaron): apply migration `0015`, create the live
+> $2/$20 prices + archive the $45, set Vercel env, one real test-subscribe, flip `BILLING_ENABLED=true`.
 
 **M0 → M8 are complete and live in production.** The nightly ingests all 14 open-data sources + the sheriff scraper into a live Supabase warehouse, the four correctness gates are wired, `parcel_change_log` history is accruing (the one irreplaceable asset, PRD §0.6), the derived layer (distress composite, comps, geo_metric, geo boundaries) is built + live-verified, the **serving + map layer is shipped** (read APIs + MapLibre 4-lens scan + per-parcel tiles), the **property deep-dive (M5)** renders every figure bound to live sourced data with zero fabrication, the **leads + mini-CRM + CSV export + BYO skip-trace (M6)** app-layer is built + verified, **M7 — accounts + alerts (free)** is live (Supabase Auth + saved areas + nightly ZeptoMail digest), and **M8 — Stripe subscriptions** is live (checkout + verified webhook + portal, paywall behind `BILLING_ENABLED`) — all at **https://www.bandbox.pro**.
 

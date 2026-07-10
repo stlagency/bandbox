@@ -13,6 +13,7 @@ import {
   evaluateOpaRowCount,
   geomSqlExpr,
   parseOpaCsv,
+  withStallGuard,
 } from '../src/adapters/opaBulk.js';
 import { measureJoinRate } from '../src/joinRate.js';
 import { readFixture, loadParcelIndexFixture } from './helpers.js';
@@ -104,5 +105,36 @@ describe('golden OPA CSV parse', () => {
     const onDecoy = measureJoinRate('opa', rows, ['parcel_id_num'], philadelphia, parcelIndex);
     expect(onDecoy.perKey[0]!.normalizedCount).toBe(0);
     expect(onDecoy.bestRate).toBe(0);
+  });
+});
+
+describe('withStallGuard — idle watchdog on the body transfer', () => {
+  it('passes elements through when the source keeps producing', async () => {
+    async function* src() {
+      yield 1;
+      yield 2;
+      yield 3;
+    }
+    const out: number[] = [];
+    let stalled = false;
+    for await (const v of withStallGuard(src(), 5_000, () => (stalled = true))) out.push(v);
+    expect(out).toEqual([1, 2, 3]);
+    expect(stalled).toBe(false);
+  });
+
+  it('rejects + fires onStall when the source stops producing (the 2026 hang mode)', async () => {
+    // A source that yields once then hangs forever — exactly a mid-body S3 stall.
+    async function* src() {
+      yield 1;
+      await new Promise(() => {}); // never resolves
+    }
+    let stalled = false;
+    const consume = async () => {
+      const out: number[] = [];
+      for await (const v of withStallGuard(src(), 20, () => (stalled = true))) out.push(v);
+      return out;
+    };
+    await expect(consume()).rejects.toThrow(/stalled/);
+    expect(stalled).toBe(true);
   });
 });

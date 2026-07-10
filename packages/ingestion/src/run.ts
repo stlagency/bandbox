@@ -128,6 +128,17 @@ async function runSpineSource(
  * registry is honest about what's wired. Returns a per-source report.
  */
 export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceRunReport[]> {
+  // Per-source progress logging: the loop used to be a silent black box — during
+  // the Jun–Jul 2026 hang the log showed NOTHING between the run banner and the
+  // 6h kill, so the stuck source was undiagnosable. One start + one done line per
+  // source localizes any future hang to an exact source and phase.
+  const logDone = (r: SourceRunReport, t0: number) =>
+    console.log(
+      `[worker] ${r.source}: ${r.status} in ${((Date.now() - t0) / 1000).toFixed(1)}s` +
+        ` (in=${r.rowsIn}, promoted=${r.rowsPromoted})${r.error ? ` — ${r.error}` : ''}`,
+    );
+
+  console.log('[worker] loading parcel-key index…');
   let parcelIndex: ParcelKeyIndex = await loadParcelKeyIndex(db);
   const reports: SourceRunReport[] = [];
 
@@ -139,6 +150,8 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
       continue;
     }
 
+    console.log(`[worker] ${spec.name}: start`);
+    const t0 = Date.now();
     const runId = await openIngestRun(db, spec.name);
     try {
       const batch = await fetcher(spec, db);
@@ -146,15 +159,19 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
       if (isSpine(spec)) {
         const report = await runSpineSource(db, spec, batch, steps, deps.hooks, runId);
         reports.push(report);
+        logDone(report, t0);
         // Refresh the parcel-key index so the keyed sources measure against real parcels.
         if (report.status === 'success' && batch.rows.length > 0) {
+          console.log('[worker] refreshing parcel-key index…');
           parcelIndex = await loadParcelKeyIndex(db);
         }
         continue;
       }
 
       if (isScrape(spec)) {
-        reports.push(await runScrapeSource(db, spec, batch, steps, deps.hooks, runId));
+        const report = await runScrapeSource(db, spec, batch, steps, deps.hooks, runId);
+        reports.push(report);
+        logDone(report, t0);
         continue;
       }
 
@@ -184,12 +201,14 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
         const committed = (await readSourceCursor(db, spec.name))?.rowsCommitted ?? 0;
         await writeSourceCursor(db, spec.name, batch.nextCursor, committed + outcome.rowsPromoted, runId);
       }
-      reports.push({
+      const report: SourceRunReport = {
         source: spec.name,
         status,
         rowsIn: outcome.rowsIn,
         rowsPromoted: outcome.rowsPromoted,
-      });
+      };
+      reports.push(report);
+      logDone(report, t0);
     } catch (err) {
       // One source failing NEVER halts the rest of the nightly run (PRD §3.1).
       const message = err instanceof Error ? err.message : String(err);
@@ -201,14 +220,20 @@ export async function runWorker(db: DbClient, deps: WorkerDeps): Promise<SourceR
       } catch {
         /* alert failure must not abort the run */
       }
-      reports.push({ source: spec.name, status: 'failed', rowsIn: 0, rowsPromoted: 0, error: message });
+      const report: SourceRunReport = { source: spec.name, status: 'failed', rowsIn: 0, rowsPromoted: 0, error: message };
+      reports.push(report);
+      logDone(report, t0);
     }
   }
 
   return reports;
 }
 
-/** Default no-op hooks (overridden in production with healthchecks + tile queue). */
+/**
+ * Stdout logging hooks. These are what production runs — run-level alerting is
+ * NOT here; it lives in the workflow (nightly.yml's healthchecks.io /start,
+ * success, and /fail pings + `main()`'s nonzero exit on any failed source).
+ */
 export const consoleHooks: PipelineHooks = {
   alert(event) {
     console.warn(`[alert:${event.kind}] ${event.source}: ${event.message}`);
@@ -269,6 +294,13 @@ export async function main(): Promise<void> {
     for (const r of reports) {
       console.log(`  ${r.source}: ${r.status} (in=${r.rowsIn}, promoted=${r.rowsPromoted})${r.error ? ` — ${r.error}` : ''}`);
     }
+
+    // Surface partial failure to the workflow: without this, a run with failed
+    // sources exits 0, the job goes green, and the healthchecks success ping
+    // fires — silent decay. `process.exitCode` (not `process.exit`) lets the
+    // finalize/tiles/alerts steps below still run; the job then fails, which
+    // triggers nightly.yml's `if: failure()` → healthchecks `/fail` ping.
+    if (failed > 0) process.exitCode = 1;
 
     // Derived finalize runs ONCE, after every source promoted (PRD §4.1 invariant):
     // geo-stamp → refresh comp_candidate + distress_signal (CONCURRENTLY) → geo_metric.

@@ -76,5 +76,10 @@ export async function GET(req: Request): Promise<Response> {
       unit,
     },
   };
-  return NextResponse.json(body);
+  // Warehouse data refreshes once nightly — cache at the edge for an hour and
+  // serve stale while revalidating. Also collapses the map page's concurrent
+  // duplicate /api/scan fetches on repeat visits. Anon route — no per-user data.
+  return NextResponse.json(body, {
+    headers: { 'cache-control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+  });
 }

@@ -21,5 +21,8 @@ export async function GET(
 
   const detail = await computeGeoDetail(db(), type, decodeURIComponent(id));
   if (detail === null) return NextResponse.json({ error: 'geo not found' }, { status: 404 });
-  return NextResponse.json(detail);
+  // Nightly-refreshed aggregate — same caching rationale as /api/scan.
+  return NextResponse.json(detail, {
+    headers: { 'cache-control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+  });
 }

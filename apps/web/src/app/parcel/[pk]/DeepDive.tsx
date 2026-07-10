@@ -28,6 +28,7 @@ import {
   LabelCell,
 } from '../../../components/Ledger';
 import { SourceStamp } from '../../../components/SourceStamp';
+import { apiFetch } from '../../../lib/api-client';
 import { GlossaryTerm } from '../../../components/GlossaryTerm';
 import { DistressBar } from '../../../components/DistressBar';
 import { ValueDerivationDrawer } from '../../../components/ValueDerivationDrawer';
@@ -279,7 +280,7 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
         ? 'No delinquency on record · Revenue Dept.'
         : 'No Revenue Dept delinquency record for this parcel.';
 
-  // Save-this-lead inline state (no new imports; plain fetch).
+  // Save-this-lead inline state.
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'signin' | 'error'>(
     'idle',
   );
@@ -287,9 +288,9 @@ export function DeepDive({ data }: { data: ParcelDeepDive }) {
     if (saveState === 'saving' || saveState === 'saved') return;
     setSaveState('saving');
     try {
-      const res = await fetch('/api/leads/save', {
+      // apiFetch attaches the Bearer token (the only auth path the server reads).
+      const res = await apiFetch('/api/leads/save', {
         method: 'POST',
-        credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ parcel_pk: p.parcel_pk }),
       });

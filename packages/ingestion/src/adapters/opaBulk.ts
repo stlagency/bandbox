@@ -149,14 +149,57 @@ export function computeSoftRetire(
 /** Default per-request network timeout (ms) for the live OPA transport. */
 export const DEFAULT_OPA_TIMEOUT_MS = 30_000;
 
+/**
+ * Default idle (per-chunk) stall budget for the OPA body transfer. A flat
+ * whole-body deadline would false-fail a legitimately slow-but-alive 303 MB
+ * download; an IDLE watchdog only fires when no progress happens at all.
+ */
+export const DEFAULT_OPA_STALL_MS = 120_000;
+
+/**
+ * Guard an async iterable with an idle watchdog: if no element arrives within
+ * `idleMs`, call `onStall` (destroy the underlying stream) and reject. This is
+ * the missing bound on the OPA body phase — the AbortController in
+ * `fetchOpaHttp` guards connect/TTFB only, so before this guard existed an S3
+ * host that accepted the connection and then stalled MID-BODY hung the serial
+ * nightly to GitHub's 6h kill with no `failed` status and no alert
+ * (the Jun–Jul 2026 outage).
+ */
+export async function* withStallGuard<T>(
+  source: AsyncIterable<T>,
+  idleMs: number,
+  onStall: () => void,
+): AsyncGenerator<T, void, void> {
+  const it = source[Symbol.asyncIterator]();
+  while (true) {
+    let timer: NodeJS.Timeout | undefined;
+    const stalled = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        onStall();
+        reject(new Error(`OPA body stalled — no data for ${idleMs}ms`));
+      }, idleMs);
+    });
+    try {
+      const res = await Promise.race([it.next(), stalled]);
+      if (res.done) return;
+      yield res.value;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export interface FetchOpaHttpOptions {
   /**
    * Per-request network timeout in ms (default 30_000). Bounds the connection /
    * response-head phase of each call so a STALLING S3 host (no response) can't
    * hang the SERIAL nightly indefinitely with no `failed` status and no alert.
    * NOTE: for `getStream` the timer is cleared once the response head arrives —
-   * it guards connect/TTFB, it deliberately does NOT cap the (legitimately large,
-   * ~303 MB) body transfer that the caller streams afterward.
+   * it guards connect/TTFB only. The BODY phase is bounded separately by the
+   * per-chunk `withStallGuard` idle watchdog in `makeOpaFetcher` (a flat cap
+   * would false-fail the legitimately large ~303 MB transfer; an idle guard
+   * only fires on true stalls). Do NOT remove either bound — each closes a
+   * different infinite-await path.
    */
   timeoutMs?: number;
 }
@@ -201,7 +244,8 @@ export function fetchOpaHttp(opts: FetchOpaHttpOptions = {}): OpaHttp {
         return Readable.fromWeb(res.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
       } finally {
         // Timer cleared once the head is in hand — guards connect/TTFB only, so a
-        // legitimate multi-hundred-MB stream is not capped at `timeoutMs`.
+        // legitimate multi-hundred-MB stream is not capped at `timeoutMs`. The body
+        // phase is guarded by `withStallGuard` in the caller (see FetchOpaHttpOptions).
         clearTimeout(timer);
       }
     },

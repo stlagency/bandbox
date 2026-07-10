@@ -1,3 +1,5 @@
+> ⚠️ **HISTORICAL — build complete.** This was the greenfield v1 kickoff prompt; M0–M8 shipped and are live at https://www.bandbox.pro. Resume from `docs/NEXT_SESSION.md`. (The repo path it references, `cw_Philly`, no longer exists.)
+
 ultracode
 
 You are kicking off the v1 build of **Bandbox** — an open-source (AGPL), transparency-first Philadelphia residential real-estate market-intelligence tool. Greenfield repo at `/Users/aaroncohen/CLAUDEMAXING/cw_Philly`. You have NO prior conversation context; the planning docs ARE the context.

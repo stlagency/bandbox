@@ -14,6 +14,7 @@
  */
 import { useState } from 'react';
 import type { SkipTraceResult } from '@bandbox/core/contracts';
+import { apiFetch } from '../lib/api-client';
 
 type State =
   | { kind: 'idle' }
@@ -52,10 +53,12 @@ export function SkipTraceButton({ parcelPk }: SkipTraceButtonProps) {
   async function run() {
     setState({ kind: 'loading' });
     try {
-      const res = await fetch(`/api/skiptrace/${encodeURIComponent(parcelPk)}`, {
+      // apiFetch attaches the Supabase Bearer token — the server's getSession
+      // reads ONLY the Authorization header (no cookie path), so a raw fetch()
+      // is always unauthenticated in prod.
+      const res = await apiFetch(`/api/skiptrace/${encodeURIComponent(parcelPk)}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        credentials: 'same-origin',
         body: '{}',
       });
       if (!res.ok) {

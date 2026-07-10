@@ -1,0 +1,21 @@
+-- 0016_norm_parcel_search_path.sql
+--
+-- Persist the live fix for the Supabase `function_search_path_mutable` advisor
+-- on public.norm_parcel (applied to prod 2026-07-07): 0002 created the function
+-- without a fixed search_path; 0014's Vault-proxy functions already set
+-- search_path = ''. norm_parcel's body uses only built-ins (regexp_replace,
+-- lpad, length), so an empty search_path is safe — verified live:
+-- norm_parcel('123-A45 ') = '000012345' before and after.
+--
+-- NOT edited in place in 0002 because the migration runner records a sha256
+-- checksum per applied file (packages/db/src/migrate.ts) — an in-place edit
+-- would silently drift the ledger and never re-run. Idempotent; safe to re-run.
+--
+-- (Context: the OTHER advisor on this project, rls_disabled_in_public on
+-- public.spatial_ref_sys, is NOT fixable from the `postgres` role — the table
+-- is owned by supabase_admin and both ENABLE RLS and REVOKE are owner-only,
+-- verified live 2026-07-07. It is also moot: the entire `public` schema is off
+-- the PostgREST Data API (db_schema = graphql_public), so nothing in `public`
+-- is anon-reachable. Accepted + documented in docs/NEXT_SESSION.md.)
+
+alter function public.norm_parcel(text) set search_path = '';
