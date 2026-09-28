@@ -1,5 +1,10 @@
 # Build status
 
+> **⛔ DECOMMISSIONED 2026-09-28.** Bandbox is cancelled and will be rebuilt from scratch as a SpeedJawn
+> module. The site is paused, the nightly is disabled, and the DB is archived + restore-verified at
+> `~/Bandbox-Archive/2026-09-28/`. **Read [`docs/DECOMMISSION.md`](docs/DECOMMISSION.md) first**
+> (what was shut down, how to undo it, remaining steps). Rebuild prompt: [`docs/REBUILD_PROMPT.md`](docs/REBUILD_PROMPT.md).
+
 **M0–M8 shipped + live in production at https://www.bandbox.pro.**
 
 Nightly ingestion of all 14 open-data sources + the sheriff scraper into the live Supabase warehouse;

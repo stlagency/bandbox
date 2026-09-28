@@ -1,6 +1,8 @@
 # Bandbox — project orientation
 
-- **State: M0–M8 shipped + LIVE at https://www.bandbox.pro.** Do not treat this as a greenfield build.
+- **State: DECOMMISSIONED 2026-09-28** (was M0–M8 live at www.bandbox.pro). Read `docs/DECOMMISSION.md` first.
+  Site paused, nightly disabled, DB archived at `~/Bandbox-Archive/2026-09-28/`. Being rebuilt as a SpeedJawn
+  module (`docs/REBUILD_PROMPT.md`). Treat this repo as read-only reference.
 - **Single source of truth: `docs/NEXT_SESSION.md`** — read it FIRST every session (current state,
   verified facts, gotchas, open operator items). `STATUS.md`/`HANDOFF.md` are pointers to it.
 - Engineering truth: `PRD.md`. Scope: `CONCEPT_v2_shared_understanding.md`. Design: `design/DESIGN.md`

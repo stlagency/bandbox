@@ -1,5 +1,10 @@
 # Bandbox — resume here (next session)
 
+> **⛔ DECOMMISSIONED 2026-09-28.** Bandbox is cancelled and will be rebuilt from scratch as a SpeedJawn
+> module. The site is paused, the nightly is disabled, and the DB is archived + restore-verified at
+> `~/Bandbox-Archive/2026-09-28/`. **Read [`docs/DECOMMISSION.md`](DECOMMISSION.md) first**
+> (what was shut down, how to undo it, remaining steps). Rebuild prompt: [`docs/REBUILD_PROMPT.md`](REBUILD_PROMPT.md).
+
 > **✅ 2026-07-09/10 — OUTAGE ROOT-CAUSED + FIXED + MOBILE/UX PASS SHIPPED (commits `8c70c54`,
 > `936afb0`, `d947890`, `d001bff` — all live).**
 > (1) **The nightly had been dead ~3 weeks** (every scheduled run since ~Jun 19 hung silently to the 6h

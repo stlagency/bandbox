@@ -1,5 +1,10 @@
 # Bandbox — Handoff
 
+> **⛔ DECOMMISSIONED 2026-09-28.** Bandbox is cancelled and will be rebuilt from scratch as a SpeedJawn
+> module. The site is paused, the nightly is disabled, and the DB is archived + restore-verified at
+> `~/Bandbox-Archive/2026-09-28/`. **Read [`docs/DECOMMISSION.md`](docs/DECOMMISSION.md) first**
+> (what was shut down, how to undo it, remaining steps). Rebuild prompt: [`docs/REBUILD_PROMPT.md`](docs/REBUILD_PROMPT.md).
+
 Open-source (AGPL), transparency-first **Philadelphia residential real-estate market-intelligence tool**.
 **M0–M8 are shipped and live at https://www.bandbox.pro.**
 
